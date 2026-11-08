@@ -34,6 +34,7 @@
     },
     stop() { clear(); if (real) speechSynthesis.cancel(); log.push({ t: 'stop' }); },
     setState: s => log.push({ t: 'state', s }),
+    openSettings: () => log.push({ t: 'openSettings' }),
     voiceInfo: async () => ({ voiceName: 'Fake', hasWord: !R.platform.fake.noWords, cap: R.platform.fake.cap }),
     getSettings: async () => ({ ...store }),
     saveSettings: async o => { Object.assign(store, o); },

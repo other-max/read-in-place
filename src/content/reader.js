@@ -25,7 +25,10 @@
   const sent = () => M.sentences(block())[st.pos.s];
   const steps = () => C.stepsFor(st.voice.cap || 4);
   const clampRate = r => { const s = steps(); return Math.min(Math.max(r, s[0]), s[s.length - 1]); };
-  const label = () => `${st.state === 'paused' ? 'Paused' : 'Reading'} · ${C.fmt(st.rate)}x`;
+  const refreshHud = () => {
+    const s = steps();
+    hud.update({ mode: st.state, rate: st.rate, min: s[0], max: s[s.length - 1] });
+  };
 
   async function loadSettings() {
     const s = await P.getSettings();
@@ -153,7 +156,7 @@
         break;
       case 'error':
         pause();
-        hud.show(`Speech error: ${ev.errorMessage || 'unknown'}`, { sticky: true });
+        hud.message(`Speech error: ${ev.errorMessage || 'unknown'}`, 5000);
         break;
     }
   }
@@ -238,7 +241,7 @@
       p = dir < 0 && (st.pos.s > 0 || st.pos.off > M.words(b, first)[0].start) ?
         { b: st.pos.b, s: 0, off: first.start } : stepBlock(st.pos, dir);
     }
-    if (!p) return hud.show(dir > 0 ? 'End of page' : 'Start of page');
+    if (!p) return hud.message(dir > 0 ? 'End of page' : 'Start of page');
     st.pos = p;
     st.userScrollAt = 0;
     if (st.state === 'playing') speak();
@@ -254,12 +257,12 @@
     if (st.state !== 'playing') return;
     rebuild();
     const pos = at || fromSelection() || M.firstVisible(st.model);
-    if (!pos) { stop(); hud.show('Nothing to read here'); setTimeout(hideIfOff, 1800); return; }
+    if (!pos) { stop(); hud.message('Nothing to read here', 1800); setTimeout(hideIfOff, 1900); return; }
     st.pos = pos;
     observe();
     st.beat = setInterval(() => P.send({ type: 'ping' }), 20000);
     P.setState('playing');
-    hud.show(label());
+    refreshHud();
     speak();
   }
 
@@ -280,8 +283,8 @@
 
   function finish() {
     stop();
-    hud.show('End of page');
-    setTimeout(hideIfOff, 1800);
+    hud.message('End of page', 1800);
+    setTimeout(hideIfOff, 1900);
   }
 
   function pause() {
@@ -291,7 +294,7 @@
     st.utt = null;
     P.stop();
     P.setState('paused');
-    hud.show(label(), { sticky: true });
+    refreshHud();
   }
 
   function resume() {
@@ -299,7 +302,7 @@
     st.state = 'playing';
     if (needsRebuild()) rebuildKeeping(false);
     P.setState('playing');
-    hud.show(label());
+    refreshHud();
     speak();
   }
 
@@ -310,7 +313,7 @@
     st.pos = pos;
     st.userScrollAt = 0;
     if (st.state === 'paused') { st.state = 'playing'; P.setState('playing'); }
-    hud.show(label());
+    refreshHud();
     speak();
     return true;
   }
@@ -324,11 +327,11 @@
     else if (dir > 0) r = ss.find(x => x > st.rate + 1e-9) ?? max;
     else r = [...ss].reverse().find(x => x < st.rate - 1e-9) ?? ss[0];
     if (dir > 0 && r === st.rate) {
-      return hud.show(`${C.fmt(max)}x is the top speed for this voice`);
+      return hud.message(`${C.fmt(max)}x is the top speed for this voice`);
     }
     st.rate = r;
     P.saveSettings({ rate: r });
-    hud.show(label(), { sticky: st.state === 'paused' });
+    refreshHud();
     if (st.state === 'playing') speak(); // restart from the current word at the new speed
   }
 
@@ -341,6 +344,15 @@
     }
     if (changes.rate) st.rate = clampRate(changes.rate.newValue);
     else st.rate = clampRate(st.rate);
+    refreshHud();
+  });
+
+  hud.bind({
+    togglePause: () => (st.state === 'playing' ? pause() : resume()),
+    slower: () => changeRate(-1),
+    faster: () => changeRate(+1),
+    settings: () => P.openSettings(),
+    stop: () => stop(),
   });
 
   R.reader = {

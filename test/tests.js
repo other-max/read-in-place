@@ -285,6 +285,60 @@
       if (rd.state !== 'off') throw rd.state;
       if (R.hud.text() !== 'End of page') throw R.hud.text();
     },
+    async 'hud: collapsed shows pause button and speed'() {
+      scrollTo(0, 0);
+      await fresh();
+      const H = R.hud;
+      if (H._el('.rate').textContent !== '1x') throw H._el('.rate').textContent;
+      if (H._el('.pp').getAttribute('aria-label') !== 'Pause (Space)') throw H._el('.pp').getAttribute('aria-label');
+      if (getComputedStyle(H._el('.stop')).display !== 'none') throw 'controls open without hover';
+    },
+    async 'hud: pause button pauses and resumes'() {
+      scrollTo(0, 0);
+      await fresh();
+      R.hud._click('.pp');
+      if (rd.state !== 'paused') throw rd.state;
+      if (R.hud._el('.pp').getAttribute('aria-label') !== 'Resume (Space)') throw 'icon not updated';
+      R.hud._click('.pp');
+      if (rd.state !== 'playing') throw rd.state;
+    },
+    async 'hud: speed buttons step and disable at the limits'() {
+      scrollTo(0, 0);
+      await fresh();
+      R.hud._click('.faster');
+      if (rd.st.rate !== 1.25 || R.hud._el('.rate').textContent !== '1.25x') throw rd.st.rate;
+      for (let i = 0; i < 30; i++) R.hud._click('.faster');
+      if (rd.st.rate !== 4 || !R.hud._el('.faster').disabled) throw `rate ${rd.st.rate}`;
+      if (!R.hud._el('.faster').title.includes('top speed')) throw R.hud._el('.faster').title;
+      for (let i = 0; i < 30; i++) R.hud._click('.slower');
+      if (rd.st.rate !== 0.5 || !R.hud._el('.slower').disabled) throw `rate ${rd.st.rate}`;
+      key('0');
+      if (R.hud._el('.slower').disabled || R.hud._el('.faster').disabled) throw 'still disabled at 1x';
+    },
+    async 'hud: settings button opens settings'() {
+      scrollTo(0, 0);
+      await fresh();
+      R.hud._click('.settings');
+      if (!R.testLog.some(e => e.t === 'openSettings')) throw 'not requested';
+      if (rd.state !== 'playing') throw 'reading was interrupted';
+    },
+    async 'hud: stop button stops and removes it'() {
+      scrollTo(0, 0);
+      await fresh();
+      R.hud._click('.stop');
+      if (rd.state !== 'off' || document.querySelector('rip-hud')) throw rd.state;
+    },
+    async 'hud: clicking it never moves the reading position'() {
+      scrollTo(0, 0);
+      await fresh();
+      const n = speaks().length;
+      const r = document.querySelector('rip-hud') && R.hud._el('.rate').getBoundingClientRect();
+      const x = r.left + r.width / 2, y = r.top + r.height / 2;
+      const target = document.elementFromPoint(x, y);
+      if (target?.localName !== 'rip-hud') throw `hit ${target?.localName}`;
+      target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, composed: true, clientX: x, clientY: y }));
+      if (speaks().length !== n) throw 'jumped';
+    },
     async 'no layout change: body HTML untouched while reading'() {
       rd.stop();
       scrollTo(0, 0);

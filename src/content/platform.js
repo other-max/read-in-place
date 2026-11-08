@@ -18,6 +18,7 @@
     speak: (id, text, opts) => send({ type: 'speak', id, text, ...opts }),
     stop: () => send({ type: 'stop' }),
     setState: state => send({ type: 'state', state }),
+    openSettings: () => send({ type: 'openSettings' }),
     voiceInfo: voiceName => send({ type: 'voiceInfo', voiceName, lang: document.documentElement.lang }),
     getSettings: () => chrome.storage.sync.get(RIP_COMMON.DEFAULTS),
     saveSettings: o => chrome.storage.sync.set(o).catch(() => {}),

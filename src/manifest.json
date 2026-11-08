@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Read in Place",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Reads the page aloud where it is, highlighting each word as it's spoken.",
   "minimum_chrome_version": "128",
   "permissions": ["tts", "storage", "activeTab", "scripting"],

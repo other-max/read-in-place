@@ -77,6 +77,9 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
     case 'calibrate':
       calibrate(msg.voiceName).then(respond);
       return true;
+    case 'openSettings':
+      chrome.runtime.openOptionsPage();
+      break;
     case 'ping': // keeps the worker awake during long sentences
       break;
   }
