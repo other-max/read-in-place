@@ -4,7 +4,7 @@ Chrome MV3 extension that reads a web page aloud in place: no reading mode, no p
 window, no reflow. Click where you want it to start, jump around with keys, and watch each
 word highlight on the real page as it's spoken. Speed runs from 0.5x to 10x.
 
-Status: v0.1.1. Plan and decisions in `notes/PLAN.md`.
+Status: v0.1.2. Plan and decisions in `notes/PLAN.md`.
 
 ## Install
 
