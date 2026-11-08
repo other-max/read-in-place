@@ -1,0 +1,10 @@
+/dist/
+*.zip
+*.crx
+*.pem
+.env
+.env.*
+.DS_Store
+.vscode/
+.idea/
+.claude/settings.local.json

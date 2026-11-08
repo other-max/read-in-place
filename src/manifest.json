@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "Read in Place",
+  "version": "0.1.0",
+  "description": "Reads the page aloud where it is, highlighting each word as it's spoken.",
+  "permissions": ["tts", "storage", "activeTab", "scripting"],
+  "background": { "service_worker": "background/service-worker.js" },
+  "action": { "default_title": "Read in Place" },
+  "options_page": "options/options.html",
+  "commands": {
+    "toggle-reader": {
+      "suggested_key": { "default": "Alt+Shift+R" },
+      "description": "Start or stop reading on this page"
+    }
+  }
+}
