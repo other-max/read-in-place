@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Read in Place settings</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <main>
+    <h1>Read in Place</h1>
+    <p class="lede">Press <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd> (<kbd>Option</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd> on a Mac) on any page to start or stop reading.</p>
+
+    <section>
+      <h2>Voice</h2>
+      <label for="voice">Voice</label>
+      <select id="voice"></select>
+      <p class="hint" id="voice-note"></p>
+      <div class="row">
+        <button id="test" type="button">Test voice</button>
+        <button id="measure" type="button">Measure top speed</button>
+      </div>
+      <p class="status" id="speed-note" role="status"></p>
+    </section>
+
+    <section>
+      <h2>Speed</h2>
+      <label for="rate">Reading speed</label>
+      <select id="rate"></select>
+      <p class="hint">The fastest step is the top speed your voice can really reach. On-device voices usually go well past 2x. Online voices usually stop around 2x.</p>
+    </section>
+
+    <section>
+      <h2>Highlight colors</h2>
+      <div class="row">
+        <label class="color"><input type="color" id="wordColor"> Current word</label>
+        <label class="color"><input type="color" id="sentenceColor"> Current sentence</label>
+      </div>
+      <p class="hint">New colors apply the next time you start reading on a page.</p>
+    </section>
+
+    <section>
+      <h2>Keys while reading</h2>
+      <table>
+        <tbody>
+          <tr><td><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd></td><td>Start or stop on the current tab</td></tr>
+          <tr><td>Click text</td><td>Read from that word (<kbd>Alt</kbd>+click on links)</td></tr>
+          <tr><td><kbd>Space</kbd></td><td>Pause or resume</td></tr>
+          <tr><td><kbd>→</kbd> / <kbd>←</kbd></td><td>Next or previous sentence</td></tr>
+          <tr><td><kbd>↓</kbd> / <kbd>↑</kbd></td><td>Next or previous paragraph</td></tr>
+          <tr><td><kbd>=</kbd> / <kbd>-</kbd></td><td>Faster or slower (<kbd>]</kbd> / <kbd>[</kbd> also work)</td></tr>
+          <tr><td><kbd>0</kbd></td><td>Back to 1x</td></tr>
+          <tr><td><kbd>Esc</kbd></td><td>Stop</td></tr>
+        </tbody>
+      </table>
+      <button id="shortcuts" type="button">Change the start shortcut</button>
+    </section>
+  </main>
+  <script src="../shared/common.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>

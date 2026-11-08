@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Read in Place test page</title>
+  <style>
+    body { font: 17px/1.6 Georgia, serif; max-width: 720px; margin: 0 auto; padding: 80px 16px; }
+    header.fixed { position: fixed; top: 0; left: 0; right: 0; background: #eee; padding: 8px 16px; }
+    .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+    .box { height: 140px; overflow: auto; border: 1px solid #ccc; padding: 8px; }
+    .spacer { height: 1400px; }
+    .flexrow { display: flex; gap: 8px; }
+    ::highlight(rip-sentence) { background-color: #fff1a866; }
+    ::highlight(rip-word) { background-color: #ffd84d; color: #111; }
+  </style>
+</head>
+<body>
+  <header class="fixed">Site menu. Search.</header>
+  <h1 id="title">Testing the reader</h1>
+  <p id="p1">The first paragraph has <b>bold</b> and <i>italic</i> words. It also has a <a href="#nowhere" id="link">link to nowhere</a> in it. Dr. Smith arrived at 3 p.m. on Tuesday.</p>
+  <p id="p2">Second paragraph starts here.<span class="sr-only">Screen reader only text.</span> It continues after a break.<br>This line came after a line break.</p>
+  <p id="hidden" style="display:none">This text is hidden and must never be read.</p>
+  <p id="aria" aria-hidden="true">This text is aria hidden.</p>
+  <div id="mixed">Loose text in a div. <p id="inner">A nested paragraph.</p> More loose text.</div>
+  <ul id="list"><li>List item one.</li><li>List item two.</li></ul>
+  <table id="tbl"><tr><td>Cell A.</td><td>Cell B.</td></tr></table>
+  <p id="cite">A cited claim.<sup class="reference">[12]</sup> Another sentence.</p>
+  <textarea id="ta">Typing area text</textarea>
+  <button id="btn">Button label</button>
+  <div class="flexrow" id="flex"><span>Flex one.</span><span>Flex two.</span></div>
+  <p id="long">This sentence is intentionally very long and has no full stop for a while, it keeps going with clause after clause, adding words and more words, so that the splitter has to cut it somewhere sensible near a comma, which is what we want to check here, and then it keeps going even further than that with a few more words, until finally after many more words that pad out the length well past the limit it comes to an end.</p>
+  <div class="box" id="box">
+    <p id="b1">Inside a scroll box, first line.</p>
+    <p>Filler sentence one.</p><p>Filler sentence two.</p><p>Filler sentence three.</p>
+    <p>Filler sentence four.</p><p>Filler sentence five.</p><p>Filler sentence six.</p>
+    <p id="bLast">The last line in the box.</p>
+  </div>
+  <div class="spacer"></div>
+  <p id="end">The final paragraph of the page.</p>
+
+  <script src="../src/shared/common.js"></script>
+  <script src="fake-platform.js"></script>
+  <script src="../src/content/text-model.js"></script>
+  <script src="../src/content/highlight.js"></script>
+  <script src="../src/content/hud.js"></script>
+  <script src="../src/content/reader.js"></script>
+  <script src="../src/content/main.js"></script>
+  <script src="tests.js"></script>
+</body>
+</html>
