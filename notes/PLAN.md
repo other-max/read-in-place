@@ -1,82 +1,92 @@
-# Read in Place: v0.1.0 plan
+# Read in Place: design and status
 
 Goal: read any normal web page aloud in place, with the spoken word highlighted on the real
-page, click-to-start, keyboard navigation, and 0.5x to 10x speed. No reading mode, no popup
+page, click-to-start, keyboard navigation, and adjustable speed. No reading mode, no popup
 window, no layout changes.
 
-## Architecture
+Status: v0.1.2 built and tested by hand in Chrome. All 35 tests on the in-page suite pass.
+
+## Architecture (as built)
 
 ```
 service worker (background/service-worker.js)
-  owns chrome.tts: speak, stop, pause, resume, voice list
-  relays tts word/sentence/end events to the tab
-  handles chrome.commands (Alt+Shift+R) and the toolbar button
+  owns chrome.tts: speak one sentence at a time, stop, voice info
+  relays tts start/word/end/error events to the tab
+  toggle via chrome.commands (Alt+Shift+R) and the toolbar button; injects on demand
+  measures each voice's top speed silently (volume 0), stores it in storage.local
+  opens the settings page for the corner controls
         ^  chrome.runtime messages  v
-content script (content/*.js, injected on demand via activeTab + scripting)
-  text model:  walk visible text nodes -> blocks -> sentences -> words, with Range maps
-  reader:      queue of sentences, current position, play/pause/jump logic
-  highlight:   CSS.highlights "rip-word" and "rip-sentence" (no DOM edits)
-  input:       keydown (capture) + click handling while active
-  hud:         tiny Shadow DOM badge (speed, paused) that fades out; not a window
+content scripts (injected with activeTab + scripting, top frame only)
+  shared/common.js   defaults, speed steps, voice picking, highlight CSS
+  platform.js        bridge to the extension (tests swap in a fake)
+  text-model.js      visible text -> blocks -> sentences -> words, each mapped to a Range
+  highlight.js       CSS.highlights "rip-word" and "rip-sentence" (no DOM edits)
+  hud.js             corner controls in a closed Shadow DOM
+  reader.js          position, speaking, navigation, speed, follow-scroll
+  main.js            keys, clicks, scroll detection
 options page (options/options.html)
-  voice picker (flags voices without word events), default speed, colors
+  voice picker grouped by capability, test voice, measure top speed, default speed, colors
 ```
 
-Speaking one sentence per `chrome.tts.speak` call keeps jumps instant (stop and speak the
-next sentence) and keeps `charIndex` mapping simple.
+## Decisions
 
-## Controls (defaults, rebindable later)
+- **One sentence per `chrome.tts.speak` call.** Jumps are instant, and word `charIndex`
+  maps straight back to the block offset.
+- **Highlighting uses the CSS Custom Highlight API.** The page DOM is never changed. The
+  test suite checks that `body.innerHTML` is identical before, during, and after reading.
+- **Speed tops out at what the voice can really do.** 10x was dropped (not needed). On
+  install and when a voice is chosen, the worker speaks a test sentence silently at rising
+  rates and records the last rate that still got noticeably faster. Speed steps stop there.
+  Until measured, the guess is 4x for on-device voices and 2x for online voices.
+- **Voices without word events get estimated word timing.** It switches off as soon as a
+  real word event arrives.
+- **Keys are captured only while reading** and never while focus is in a field.
+  Shift+arrows are left alone so text selection still works.
+- **Clicks only jump when they land on a character.** Links and buttons keep working; Alt+click
+  reads a link instead of following it.
+- **Corner controls never move under the pointer.** Collapsed it shows speed and pause. On
+  hover, stop, settings, slower, and faster open to the left in fixed grid columns, with key
+  hints above. Pages can't move the pointer, so stable positions are the fix.
+- **Page changes trigger a rebuild at the next sentence** (at most every 3 seconds, or right
+  away if the current text was removed). Position is kept by DOM point, not index.
+- **activeTab only, no host permissions.** The extension can't see a page until you start it
+  there.
 
-| Action | Key |
-| --- | --- |
-| Start / stop reader | Alt+Shift+R (or toolbar icon) |
-| Pause / resume | Space |
-| Next / previous sentence | Right / Left |
-| Next / previous paragraph | Down / Up |
-| Faster / slower | `=` / `-` (also `]` / `[`) |
-| Reset speed to 1x | `0` |
-| Start from here | Click text while reader is on; Alt+click any time |
-| Exit | Esc |
+## Controls
 
-Keys are only captured while the reader is on and focus is not in an input, textarea, or
-contenteditable. Clicks on links still navigate unless Alt is held.
+| Action | Key | Corner controls |
+| --- | --- | --- |
+| Start / stop | Alt+Shift+R (Option+Shift+R on Mac), or the toolbar icon | ✕ stops |
+| Pause / resume | Space | ⏸ / ▶ |
+| Next / previous sentence | Right / Left | |
+| Next / previous paragraph | Down / Up | |
+| Faster / slower | `=` / `-` (also `]` / `[`, `+`) | + / − |
+| Reset to 1x | `0` | |
+| Read from here | Click text (Alt+click on links) | |
+| Settings | | ⚙ |
 
-Speed steps: 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 3.5, 4, 5, 6, 7, 8, 10.
+## Testing
 
-## Milestones
+`test/index.html` loads the real content scripts with `test/fake-platform.js`, a stand-in
+voice that emits word events on a timer. `test/tests.js` covers the text model, reading
+order, every key, click handling, the corner controls, estimated timing, page changes,
+nested scroll boxes, end of page, and the no-DOM-change rule. Add `?real=1` to hear the
+browser's `speechSynthesis` instead. See the README for how to run it.
 
-1. **Skeleton.** Manifest, service worker, inject-on-toggle, speak a hard-coded sentence.
-2. **Text model.** TreeWalker over visible text, skip nav/script/hidden, block grouping by
-   display type, `Intl.Segmenter` sentences and words, each mapped to a DOM `Range`.
-3. **Speak and highlight.** Sentence queue, `word` event -> word Range ->
-   `CSS.highlights.set`. Sentence highlight underneath in a softer color. Auto-scroll when
-   the word leaves the middle 60% of the viewport.
-4. **Fallback timing.** If the voice lacks `word` events, estimate word timing from length
-   and rate, and resync at each sentence boundary.
-5. **Input.** Click-to-position via `caretPositionFromPoint`, key map above, HUD badge.
-6. **Speed.** Step table, persisted in `chrome.storage.sync`, applied live by restarting the
-   current sentence at the current word. Show "capped by voice" in the HUD when the engine
-   clearly isn't going faster.
-7. **Options page.** Voice picker, default speed, highlight colors.
-8. **Test pass.** Wikipedia, a news article, Gmail message view, a docs site, a long
-   Reddit thread, a page with iframes. Check dark sites for highlight contrast.
+Not covered automatically: the service worker, `chrome.tts`, the options page, and the
+toolbar shortcut. Browser automation can't press Chrome's own shortcuts, so test those by
+hand after loading `src/` unpacked.
 
-## Acceptance for v0.1.0
+## Known limits
 
-- Works on the test pages above without changing layout.
-- Word highlight stays on the spoken word with a macOS system voice at 1x to 4x.
-- Click starts reading at the clicked word within about 200 ms.
-- All keys work and never fire while typing in a field.
-- Speed persists across tabs and restarts.
+- Chrome's PDF viewer and canvas-drawn apps such as Google Docs can't be read.
+- Text inside iframes and shadow DOM is skipped (top frame, light DOM only).
+- Online voices often top out near 2x.
+- Restricted pages (chrome://, the Web Store) show a red ! on the toolbar icon.
 
-## Deferred past v0.1.0
+## Ideas for later
 
-- True 10x on every voice via pre-rendered audio and `playbackRate` (needs a TTS source with
-  word timings, likely cloud and opt-in).
-- PDFs, Google Docs, rebinding keys, Chrome Web Store listing.
-
-## Difficulty
-
-Moderate. Everything needed is a native browser API, and v0.1.0 is roughly 800 to 1,200
-lines of plain JS. The fiddly parts are mapping speech offsets back to DOM Ranges across
-messy markup, and voice-dependent word events and speed caps.
+- Read iframes and open shadow roots.
+- Rebindable in-page keys.
+- Reading from a right-click menu item.
+- Chrome Web Store listing (needs a privacy policy and screenshots).

@@ -37,6 +37,12 @@ reader with a true 10x ceiling is a real gap.
    timings (for example a cloud TTS API), so it is post-v0.1.0. v0.1.0 will show the
    effective cap per voice so the slider is honest.
 
+## Update after building v0.1
+
+10x turned out not to be needed; the goal is simply faster than 2x. The extension measures
+each voice's real top speed (silently, at volume 0) and stops the speed steps there. True
+10x via pre-rendered audio is dropped.
+
 ## Known out of scope
 
 - Chrome's built-in PDF viewer (content scripts can't reach it).
