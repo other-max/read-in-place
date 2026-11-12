@@ -83,8 +83,10 @@ function flash(tabId) {
 function badge(tabId, state) {
   if (tabId == null) return;
   const text = state === 'playing' ? 'ON' : state === 'paused' ? 'II' : '';
-  chrome.action.setBadgeBackgroundColor({ tabId, color: state === 'paused' ? '#666' : '#1a7f37' });
-  chrome.action.setBadgeText({ tabId, text });
+  // The tab may already be closed (the page stops itself on pagehide), so ignore failures.
+  chrome.action.setBadgeBackgroundColor({ tabId, color: state === 'paused' ? '#666' : '#1a7f37' })
+    .catch(() => {});
+  chrome.action.setBadgeText({ tabId, text }).catch(() => {});
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, respond) => {
@@ -115,6 +117,7 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
       voiceInfo(msg.voiceName, msg.lang).then(respond);
       return true;
     case 'calibrate':
+      if (C.isGlint(msg.voiceName)) { respond({}); break; } // exact speed, nothing to measure
       calibrate(msg.voiceName).then(respond);
       return true;
     case 'openSettings':

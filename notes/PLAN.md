@@ -4,7 +4,7 @@ Goal: read any normal web page aloud in place, with the spoken word highlighted 
 page, click-to-start, keyboard navigation, and adjustable speed. No reading mode, no popup
 window, no layout changes.
 
-Status: v0.2.6 (renamed from Read in Place in 0.2.0). v0.1.2 was built and tested by hand in Chrome. All 66 tests on the in-page suite pass.
+Status: v0.2.7 (renamed from Read in Place in 0.2.0). v0.1.2 was built and tested by hand in Chrome. All 67 tests on the in-page suite pass.
 
 ## Architecture (as built)
 

@@ -36,6 +36,6 @@ WHAT IT CAN'T READ
 
 Chrome's built-in PDF viewer, pages drawn on a canvas such as Google Docs, Chrome's own pages, and the Chrome Web Store.
 
-On Linux, the Flatpak build of Chrome can't reach the system's voices, so it only offers Google's online voices and the built-in voices. Online voices top out near 3.5x, and their word highlighting is estimated. The built-in voices are English only.
+On Linux, the Flatpak build of Chrome can't reach the system's voices, so it only offers Google's online voices and the built-in voices. Online voices top out near 3.75x, and their word highlighting is estimated. The built-in voices are English only.
 
 Built by Navica LLC. Free and open source under the GNU GPL, version 3.

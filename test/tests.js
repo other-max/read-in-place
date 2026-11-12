@@ -405,6 +405,12 @@
       if (!near(C.engineRate(g, caps, 9), 2)) throw 'past the top';
       if (C.capFor(g, caps) !== 3.5) throw 'cap ' + C.capFor(g, caps);
     },
+    'speed: built-in voices have a fixed top speed, even with a stored measurement'() {
+      const C = RIP_COMMON, v = { voiceName: 'Heart (Glint built-in)', remote: false };
+      if (C.capFor(v, {}) !== C.GLINT.maxSpeed) throw 'unmeasured ' + C.capFor(v, {});
+      const caps = { [v.voiceName]: { best: 9.23, cps: 15, table: [{ rate: 1, speedup: 1 }] } };
+      if (C.capFor(v, caps) !== C.GLINT.maxSpeed) throw 'measured ' + C.capFor(v, caps);
+    },
     'speed: unmeasured Google voices assume rate squared, others linear'() {
       const C = RIP_COMMON, near = (a, b) => Math.abs(a - b) < 0.01;
       if (!near(C.engineRate({ voiceName: 'Google UK English Male', remote: true }, {}, 4), 2)) throw 'google';

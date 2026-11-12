@@ -57,6 +57,13 @@ async function refreshVoiceInfo() {
       'Install Chrome from google.com/chrome, and make sure speech-dispatcher is installed.');
   }
   $('voice-note').textContent = notes.join(' ');
+  const builtIn = C.isGlint(v?.voiceName);
+  $('measure').hidden = builtIn;
+  if (builtIn) {
+    $('speed-note').textContent = `Top speed: ${C.fmt(cap)}x. Built-in voices need no measuring.`;
+    fillRates(cap);
+    return { v, cap, measured: true };
+  }
   $('speed-note').textContent = m?.best ?
     `Top speed: ${C.fmt(cap)}x (measured).` :
     `Top speed: ${C.fmt(cap)}x (a guess until measured).`;

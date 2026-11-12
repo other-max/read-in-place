@@ -23,6 +23,8 @@
   // maxModelSpeed faster itself; past that, playback is sped up with pitch kept.
   const GLINT = {
     maxModelSpeed: 1.75,
+    // Speed is exact, so it's never measured. Prefetch keeps up to about 3x; 4x has short gaps.
+    maxSpeed: 4,
     voices: [
       { id: 'af_heart', voiceName: 'Heart (Glint built-in)', lang: 'en-US', gender: 'female' },
       { id: 'af_bella', voiceName: 'Bella (Glint built-in)', lang: 'en-US', gender: 'female' },
@@ -92,6 +94,7 @@
 
   // Top speed you can hear: measured if we have it, otherwise a cautious guess.
   function capFor(voice, caps) {
+    if (isGlint(voice?.voiceName)) return GLINT.maxSpeed;
     const m = voice && caps?.[voice.voiceName];
     if (m?.best) return Math.max(1, Math.floor(m.best * 4) / 4);
     // Google's online voices measured 3.75x in Chrome 157; other online voices are unknown.
