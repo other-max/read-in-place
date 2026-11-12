@@ -19,6 +19,8 @@
     mo: null,
     beat: null,
     est: null,
+    lenient: false, // model also reads aria-hidden text; set when a selection needed it
+    until: null, // [node, offset]: stop here, at the end of a selection read with "Read aloud"
   };
 
   const NO_VOICES = 'Chrome has no voices on this computer. Open settings for help.';
@@ -41,7 +43,7 @@
   }
 
   function rebuild() {
-    st.model = M.build();
+    st.model = M.build(document.body, { lenient: st.lenient });
     st.dirty = false;
   }
 
@@ -60,12 +62,70 @@
     return { b: loc.b, s, off: M.wordAt(b, ss[s], loc.off).start };
   }
 
-  function fromSelection() {
+  function selRange() {
     const sel = getSelection();
-    if (!sel?.rangeCount || sel.isCollapsed) return null;
-    const r = sel.getRangeAt(0);
-    return posAt(r.startContainer, r.startOffset);
+    if (!sel?.rangeCount || sel.isCollapsed || !sel.toString().trim()) return null;
+    return sel.getRangeAt(0).cloneRange();
   }
+
+  // The first and last points of a range that fall in text the reader reads, so a selection
+  // that starts in a citation or ends on an element boundary still maps to the words in it.
+  function rangePoints(r) {
+    const ok = n => st.model.where.get(n)?.block.i !== undefined;
+    const root = r.commonAncestorContainer;
+    const nodes = [];
+    if (root.nodeType === 3) nodes.push(root);
+    else {
+      const tw = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      for (let n; (n = tw.nextNode());) nodes.push(n);
+    }
+    let start = null, end = null;
+    for (const n of nodes) {
+      if (!ok(n) || !r.intersectsNode(n)) continue;
+      const a = n === r.startContainer ? r.startOffset : 0;
+      const e = n === r.endContainer ? r.endOffset : n.length;
+      if (a >= n.length || e <= 0) continue; // only touches the edge of this text
+      start ||= [n, a];
+      end = [n, e];
+    }
+    return start && { start, end };
+  }
+
+  // rangePoints, falling back to a lenient model when the strict one left out all of the
+  // selection. If the user could select it, they can see it, so read it. Some apps mark
+  // whole panes aria-hidden while still showing them.
+  function selPoints(r) {
+    const pts = rangePoints(r);
+    if (pts || st.lenient) return pts;
+    const was = { model: st.model, dirty: st.dirty };
+    st.lenient = true;
+    rebuild();
+    const lp = rangePoints(r);
+    if (!lp) Object.assign(st, was, { lenient: false });
+    return lp;
+  }
+
+  function fromSelection() {
+    const r = selRange(), pts = r && selPoints(r);
+    return pts && posAt(...pts.start);
+  }
+
+  // Where a selection read stops, as { b, off } in the current model. Null means read on.
+  function endBound() {
+    if (!st.until || !st.until[0].isConnected) return null;
+    const [node, offset] = st.until;
+    const loc = M.locate(st.model, node, offset);
+    if (loc) {
+      // A selection that ends partway through a word still reads the whole word.
+      const b = st.model.blocks[loc.b], ss = M.sentences(b);
+      const w = loc.off > 0 && M.wordAt(b, ss[M.sentenceAt(ss, loc.off - 1)], loc.off - 1);
+      return { b: loc.b, off: w && w.start < loc.off ? Math.max(loc.off, w.end) : loc.off };
+    }
+    const bi = M.blockAtOrAfter(st.model, node);
+    return { b: bi < 0 ? st.model.blocks.length : bi, off: 0 };
+  }
+
+  const pastEnd = (pos, end) => !!end && (pos.b > end.b || (pos.b === end.b && pos.off >= end.off));
 
   // Rebuild after the page changed, keeping our place by DOM position.
   // atEnd: anchor on the end of the current sentence (used when moving on to the next one).
@@ -109,12 +169,17 @@
     clearEst();
     const b = block(), s = sent();
     const start = Math.max(st.pos.off ?? s.start, s.start);
+    let bound = endBound();
+    if (pastEnd(st.pos, bound)) { st.until = bound = null; } // already past it: read on
+    const end = bound?.b === st.pos.b && bound.off < s.end ? Math.max(bound.off, start + 1) : s.end;
     const id = ++st.seq;
-    const u = (st.utt = { id, start, end: s.end, gotWord: false, startedAt: 0 });
+    const u = (st.utt = { id, start, end, gotWord: false, startedAt: 0 });
     paintSentence();
     paintWord(start);
-    const n = stepSentence(st.pos, +1), nb = n && st.model.blocks[n.b], ns = nb && M.sentences(nb)[n.s];
-    P.speak(id, b.text.slice(start, s.end), { rate: st.rate, voiceName: st.voice.voiceName,
+    let n = end < s.end ? null : stepSentence(st.pos, +1);
+    if (n && pastEnd(n, bound)) n = null;
+    const nb = n && st.model.blocks[n.b], ns = nb && M.sentences(nb)[n.s];
+    P.speak(id, b.text.slice(start, end), { rate: st.rate, voiceName: st.voice.voiceName,
       next: ns ? nb.text.slice(ns.start, ns.end) : '' });
     // If the voice never reports "start", fall back to timing from now. Built-in voices
     // always report it, but loading the model the first time can take several seconds.
@@ -170,9 +235,11 @@
   }
 
   function advance() {
+    if (st.utt && st.utt.end < sent().end) return finish(); // stopped partway, at the selection end
     if (needsRebuild() && !rebuildKeeping(true)) return finish();
     const n = stepSentence(st.pos, +1);
     if (!n) return finish();
+    if (pastEnd(n, endBound())) return finish();
     st.pos = n;
     speak();
   }
@@ -181,7 +248,7 @@
 
   function paintSentence() {
     const b = block(), s = sent();
-    hl.sentence(M.rangeOf(b, s.start, s.end));
+    hl.sentence(M.rangeOf(b, s.start, st.utt?.end ?? s.end));
   }
 
   function paintWord(off) {
@@ -250,6 +317,7 @@
         { b: st.pos.b, s: 0, off: first.start } : stepBlock(st.pos, dir);
     }
     if (!p) return hud.message(dir > 0 ? 'End of page' : 'Start of page');
+    if (pastEnd(p, endBound())) st.until = null; // moved past the selection: read on
     st.pos = p;
     st.userScrollAt = 0;
     if (st.state === 'playing') speak();
@@ -258,9 +326,12 @@
 
   // ---- public controls ----
 
-  async function start(at) {
+  // at: a selection range to read (from the right-click menu). toEnd: read on past its end.
+  async function start(at, toEnd = true) {
     if (st.state !== 'off') return;
     st.state = 'playing';
+    st.until = null;
+    st.lenient = false;
     await loadSettings();
     if (st.state !== 'playing') return;
     if (st.voice.none) {
@@ -270,7 +341,13 @@
       return;
     }
     rebuild();
-    const pos = at || fromSelection() || M.firstVisible(st.model);
+    let pos;
+    if (at) {
+      const pts = selPoints(at);
+      if (!pts) { stop(); cantRead(); return; }
+      pos = posAt(...pts.start);
+      if (!toEnd) st.until = pts.end;
+    } else pos = fromSelection() || M.firstVisible(st.model);
     if (!pos) { stop(); hud.message('Nothing to read here', 1800); setTimeout(hideIfOff, 1900); return; }
     st.pos = pos;
     observe();
@@ -285,6 +362,8 @@
     st.state = 'off';
     clearEst();
     st.utt = null;
+    st.until = null;
+    st.lenient = false;
     P.stop();
     P.setState('off');
     hl.clear();
@@ -296,8 +375,9 @@
   function hideIfOff() { if (st.state === 'off') hud.hide(); }
 
   function finish() {
+    const msg = st.until ? 'End of selection' : 'End of page';
     stop();
-    hud.message('End of page', 1800);
+    hud.message(msg, 1800);
     setTimeout(hideIfOff, 1900);
   }
 
@@ -324,12 +404,42 @@
     if (st.state === 'off') return false;
     const pos = posAt(node, offset);
     if (!pos) return false;
+    if (pastEnd(pos, endBound())) st.until = null;
     st.pos = pos;
     st.userScrollAt = 0;
     if (st.state === 'paused') { st.state = 'playing'; P.setState('playing'); }
     refreshHud();
     speak();
     return true;
+  }
+
+  // From the right-click menu. toEnd: keep reading past the selection to the end of the page.
+  async function readSelection(toEnd) {
+    const r = selRange();
+    if (r && st.state === 'off') return start(r, toEnd);
+    if (r && needsRebuild()) rebuildKeeping(false);
+    const pts = r && selPoints(r);
+    if (!pts) return cantRead();
+    const was = st.until;
+    st.until = toEnd ? null : pts.end;
+    if (jumpTo(...pts.start)) return;
+    st.until = was;
+    cantRead();
+  }
+
+  // Text in a form field, which the reader skips, or nothing selected in this frame.
+  function cantRead() {
+    const f = document.activeElement;
+    const typing = f && (f.localName === 'textarea' || f.localName === 'input');
+    hud.message(typing ? "Glint Reader doesn't read text inside a typing box" :
+      "Glint Reader can't read that selection", 2400);
+    setTimeout(hideIfOff, 2500);
+  }
+
+  // A message from the extension, such as why a read in a frame couldn't start.
+  function notice(text) {
+    hud.message(text, 3000);
+    setTimeout(hideIfOff, 3100);
   }
 
   function changeRate(dir) {
@@ -381,6 +491,8 @@
     nav,
     changeRate,
     jumpTo,
+    readSelection,
+    notice,
     onTts,
     userScrolled: () => { st.userScrollAt = performance.now(); },
   };

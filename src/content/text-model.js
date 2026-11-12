@@ -24,7 +24,9 @@
     }
   }
 
-  function build(root = document.body) {
+  // lenient: also read aria-hidden and screen-reader-only text. Used when the user selected
+  // text the strict pass left out, since text they could select is text they can see.
+  function build(root = document.body, { lenient = false } = {}) {
     const styles = new Map();
     const cs = el => {
       let s = styles.get(el);
@@ -36,8 +38,14 @@
       while (el && el !== root && isInline(el)) el = el.parentElement;
       return el || root;
     };
-    const hidden = el => {
-      if (!el.checkVisibility({ visibilityProperty: true })) return true;
+    // Gone with everything inside it. Two traps here, both seen on real sites:
+    // - display: contents draws no box, so checkVisibility() says false even though its
+    //   children show (Tailwind's "contents" wrapper around Karbon's email bodies).
+    // - visibility: hidden can be undone by a child with visibility: visible, so it hides
+    //   only the text directly inside it. That is checked per text node instead.
+    const gone = el => {
+      if (cs(el).display !== 'contents' && !el.checkVisibility()) return true;
+      if (lenient) return false;
       if (el.getAttribute('aria-hidden') === 'true') return true;
       const pos = cs(el).position;
       if (pos === 'absolute' || pos === 'fixed') {
@@ -52,8 +60,11 @@
     let cur = null;
     const tw = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
       acceptNode(n) {
-        if (n.nodeType === 3) return NodeFilter.FILTER_ACCEPT;
-        if (SKIP.has(n.localName) || hidden(n)) return NodeFilter.FILTER_REJECT;
+        if (n.nodeType === 3) {
+          return cs(n.parentElement).visibility === 'visible' ? NodeFilter.FILTER_ACCEPT :
+            NodeFilter.FILTER_SKIP;
+        }
+        if (SKIP.has(n.localName) || gone(n)) return NodeFilter.FILTER_REJECT;
         if (n.localName === 'sup' && REF.test(n.textContent)) return NodeFilter.FILTER_REJECT;
         return n.localName === 'br' ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
       },
@@ -231,5 +242,5 @@
   }
 
   R.model = { build, sentences, words, sentenceAt, wordAt, domPoint, rangeOf, locate,
-    blockAtOrAfter, firstVisible };
+    blockAtOrAfter, firstNode, firstVisible };
 })();

@@ -36,6 +36,8 @@ All dashboard text, assets, permission justifications, and data use answers are 
   On Linux, use Google's .deb Chrome, not the Flatpak, which has no voices.
 - [ ] Test suite passes (`test/index.html?auto`)
 - [x] Landing page and privacy page live on navica.llc (`navica-marketing` PR #86)
+- [ ] Copy the 0.2.4 privacy policy change (right-click menu, effective 2026-11-12) to the live
+  privacy page in `navica-marketing`
 - [ ] Decide the Website content box (decision 4)
 - [ ] `scripts/package.sh`, upload the zip, fill the listing and Privacy tab, submit for review
 

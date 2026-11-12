@@ -4,7 +4,7 @@ Goal: read any normal web page aloud in place, with the spoken word highlighted 
 page, click-to-start, keyboard navigation, and adjustable speed. No reading mode, no popup
 window, no layout changes.
 
-Status: v0.2.3 (renamed from Read in Place in 0.2.0). v0.1.2 was built and tested by hand in Chrome. All 35 tests on the in-page suite pass.
+Status: v0.2.5 (renamed from Read in Place in 0.2.0). v0.1.2 was built and tested by hand in Chrome. All 54 tests on the in-page suite pass.
 
 ## Architecture (as built)
 
@@ -16,7 +16,8 @@ service worker (background/service-worker.js)
   measures each voice's top speed silently (volume 0), stores it in storage.local
   opens the settings page for the corner controls
         ^  chrome.runtime messages  v
-content scripts (injected with activeTab + scripting, top frame only)
+content scripts (injected with activeTab + scripting; top frame, or the frame a right-click
+  selection is in)
   shared/common.js   defaults, speed steps, voice picking, highlight CSS
   platform.js        bridge to the extension (tests swap in a fake)
   text-model.js      visible text -> blocks -> sentences -> words, each mapped to a Range
@@ -90,16 +91,50 @@ hand after loading `src/` unpacked.
 ## Known limits
 
 - Chrome's PDF viewer and canvas-drawn apps such as Google Docs can't be read.
-- Text inside iframes and shadow DOM is skipped (top frame, light DOM only).
+- Text inside shadow DOM is skipped (light DOM only). Frames are read only through the
+  right-click menu, and only frames the click grants access to (same site, about:blank, srcdoc).
+  A frame from another site gets a notice in the top frame instead.
 - Online voices often top out near 2x.
 - Chrome installed as a Linux Flatpak has no voices: its sandbox has neither libspeechd nor
   the speech-dispatcher socket. The extension says so on start, and the settings page explains
   it. Test on Linux with Google's .deb Chrome instead.
 - Restricted pages (chrome://, the Web Store) show a red ! on the toolbar icon.
+- Right-click menu on selected text (0.2.4), under a "Glint Reader" parent item so Chrome
+  doesn't title it with the long store name: "Read aloud" reads just the selection and stops
+  at its end, finishing a word cut partway. "Read aloud from here" starts at the selection and
+  reads on. Both work whether or not the reader is already running. Moving past the end of the
+  selection with keys or a click drops the stop point. Selections in form fields say they
+  can't be read. The menu grants activeTab, so no new host access.
+
+## Case: Karbon emails said "can't read that selection" (0.2.5)
+
+Karbon wraps the email body in a Tailwind `contents` div (`display: contents`).
+`checkVisibility()` returns false for any element with no box of its own, so the text model
+rejected the wrapper and everything in it. The email showed on screen but was not in the
+model, so a selection there mapped to nothing.
+
+The class of bug: a visibility test that rejects a whole subtree when the element itself is
+fine. Guards added for each member found:
+- `display: contents` wrappers (Tailwind `contents`, framework wrappers, custom elements with
+  `:host { display: contents }`, and `<slot>`): skip the box check for them, still check
+  their children.
+- `visibility: hidden` boxes with a `visibility: visible` child: the child shows, so hide
+  only the text directly inside the hidden box, checked per text node.
+- Apps that mark a visible pane `aria-hidden` (behind a drawer or dialog that doesn't cover
+  it): when the strict model has none of a selection, rebuild leniently, reading aria-hidden
+  and screen-reader-only text until reading stops. Selected text is text the user can see.
+- Selections inside an iframe (email clients that sandbox the message in a frame): the
+  right-click menu now runs the reader in the frame the selection is in, and speech events go
+  back to that frame. Alt+Shift+R and the toolbar button go to the frame that is reading.
+- Selections starting on skipped text (a citation, a button) were already handled by
+  `rangePoints()`.
+
+Still open: open shadow roots (Karbon's own `khq-*` components use them, though not for email
+text). Reading them needs a walker that crosses shadow boundaries and `getComposedRanges()`
+for the selection.
 
 ## Ideas for later
 
-- Read iframes and open shadow roots.
+- Read open shadow roots.
 - Rebindable in-page keys.
-- Reading from a right-click menu item.
 - Chrome Web Store listing (needs a privacy policy and screenshots).

@@ -17,6 +17,8 @@ HOW TO USE IT
 
 Press Alt+Shift+R (Option+Shift+R on a Mac), or click the toolbar icon, on any page. Reading starts from the top of what you can see, or from the text you selected. Press it again to stop.
 
+Or select some text and right-click. Read aloud reads just that text. Read aloud from here starts there and keeps going.
+
 PRIVACY
 
 Glint Reader collects nothing. It has no account, no analytics, and no servers. It can only see a page after you start it on that page, and it reads that page's text only to speak it. Your settings stay in Chrome. On-device voices speak entirely on your computer. If you choose an online voice, Chrome sends the text being spoken to that voice's provider, as it does for any extension that uses that voice.
@@ -26,6 +28,7 @@ PERMISSIONS
 • Text to speech: speaks the page with the voices in Chrome.
 • Storage: saves your voice, speed, and colors, and each voice's measured top speed.
 • Active tab and scripting: let the extension work on the current tab only when you start it there. It has no access to any site until you do.
+• Context menus: add Read aloud and Read aloud from here to the right-click menu when you select text.
 
 WHAT IT CAN'T READ
 

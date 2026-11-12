@@ -7,7 +7,7 @@ reflow. Click where you want it to start, jump around with keys, and watch each 
 highlight on the real page as it's spoken. Speed goes from 0.5x up to the fastest your
 voice can really go, which is usually well past 2x for on-device voices.
 
-Status: v0.2.3. Design notes and decisions are in `notes/PLAN.md`.
+Status: v0.2.5. Design notes and decisions are in `notes/PLAN.md`.
 
 ## Install
 
@@ -20,6 +20,8 @@ where it was running.
 
 ## Use
 
+- Select text, right-click, and choose Glint Reader. Read aloud reads just the selection. Read
+  aloud from here reads from the selection to the end of the page.
 - Click any text to read from that word. Alt+click reads a link instead of following it.
 - Space pauses. Right and Left move by sentence. Down and Up move by paragraph.
 - `=` and `-` change speed. `0` resets to 1x. Esc stops.

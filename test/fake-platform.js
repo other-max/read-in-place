@@ -2,7 +2,7 @@
 // Default: a fake voice that emits word events on a timer. ?real=1 uses speechSynthesis.
 (() => {
   const R = (globalThis.__rip ||= {});
-  const L = { tts: [], toggle: [], preempted: [], settings: [] };
+  const L = { tts: [], toggle: [], read: [], preempted: [], settings: [], notice: [] };
   const real = new URLSearchParams(location.search).has('real');
   const store = { ...RIP_COMMON.DEFAULTS };
   const log = (R.testLog = []);
@@ -45,6 +45,8 @@
     saveSettings: async o => { Object.assign(store, o); },
     on: (t, fn) => L[t].push(fn),
     _toggle: () => L.toggle.forEach(f => f()),
+    _read: toEnd => L.read.forEach(f => f(toEnd)),
+    _notice: text => L.notice.forEach(f => f(text)),
     _store: store,
   };
   function clear() { timers.forEach(clearTimeout); timers = []; }

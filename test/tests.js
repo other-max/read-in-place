@@ -41,6 +41,25 @@
     document.elementFromPoint(ev.clientX, ev.clientY).dispatchEvent(ev);
     return ev;
   };
+  // Selects from the start of `a` in elA to `chars` characters into `b` in elB (whole word if omitted).
+  function select(elA, a, elB, b, chars) {
+    const find = (el, word) => {
+      const tw = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      for (let n; (n = tw.nextNode());) { const i = n.data.indexOf(word); if (i >= 0) return [n, i]; }
+    };
+    const [sn, si] = find(elA, a), [en, ei] = find(elB, b);
+    const r = document.createRange();
+    r.setStart(sn, si); r.setEnd(en, ei + (chars ?? b.length));
+    getSelection().removeAllRanges();
+    getSelection().addRange(r);
+  }
+  const $ = id => document.getElementById(id);
+  function menuReset() {
+    rd.stop();
+    R.testLog.length = 0;
+    P.fake.noWords = false; P.fake.msPerWord = 20; P.fake.failSpeak = null;
+  }
+
   async function fresh(at) {
     rd.stop();
     R.testLog.length = 0;
@@ -61,6 +80,23 @@
       const all = M.build().blocks.map(b => b.text).join(' | ');
       for (const bad of ['must never be read', 'aria hidden', 'Screen reader only', 'Typing area', 'Button label']) {
         if (all.includes(bad)) throw `included: ${bad}`;
+      }
+    },
+    'model: display contents wrapper is read (Karbon email body)'() {
+      const t = blockText('pc')[0];
+      if (t !== 'Mail inside a display contents wrapper.') throw JSON.stringify(t);
+    },
+    'model: visible child of a visibility hidden box is read, the rest is not'() {
+      const all = M.build().blocks.map(b => b.text).join(' | ');
+      if (!all.includes('Shown again inside a hidden box.')) throw 'child missing';
+      if (all.includes('Invisible lead text')) throw 'hidden text included';
+    },
+    'model: lenient build reads aria-hidden text, strict does not'() {
+      if (blockText('ap').length) throw 'strict included it';
+      const b = M.build(document.body, { lenient: true }).blocks.find(x => x.el.id === 'ap');
+      if (!b) throw 'lenient missed it';
+      if (M.build(document.body, { lenient: true }).blocks.some(x => /must never be read/.test(x.text))) {
+        throw 'lenient read display:none text';
       }
     },
     'model: citation markers skipped'() {
@@ -391,6 +427,134 @@
         await waitFor(() => rd.state === 'paused');
         if (R.hud.text() !== 'Speech error: synthesis-failed') throw R.hud.text();
       } finally { P.fake.failSpeak = null; rd.stop(); }
+    },
+    async 'menu: read aloud reads only the selection, finishing the last word'() {
+      scrollTo(0, 0);
+      menuReset();
+      select($('p1'), 'italic', $('p2'), 'starts', 3);
+      P._read(false);
+      await waitFor(() => rd.state === 'off' && speaks().length > 0, 5000);
+      getSelection().removeAllRanges();
+      const t = speaks().map(x => x.text);
+      if (t[0] !== 'italic words.') throw JSON.stringify(t);
+      if (t.at(-1) !== 'Second paragraph starts') throw JSON.stringify(t);
+      if (R.hud.text() !== 'End of selection') throw R.hud.text();
+    },
+    async 'menu: read aloud from here keeps going past the selection'() {
+      scrollTo(0, 0);
+      menuReset();
+      select($('p1'), 'italic', $('p1'), 'words');
+      P._read(true);
+      await waitFor(() => speaks().some(x => x.text.startsWith('Second paragraph')), 5000);
+      getSelection().removeAllRanges();
+      const t = speaks().map(x => x.text);
+      if (t[0] !== 'italic words.') throw JSON.stringify(t);
+      if (!t.some(x => x.startsWith('Second paragraph'))) throw JSON.stringify(t);
+      rd.stop();
+    },
+    async 'menu: while reading, jumps to the selection and stops at its end'() {
+      scrollTo(0, 0);
+      await fresh();
+      select($('p2'), 'continues', $('p2'), 'break');
+      P._read(false);
+      await waitFor(() => rd.state === 'off', 5000);
+      getSelection().removeAllRanges();
+      if (lastSpeak() !== 'continues after a break') throw lastSpeak();
+      if (R.hud.text() !== 'End of selection') throw R.hud.text();
+    },
+    async 'menu: moving past the selection reads on'() {
+      scrollTo(0, 0);
+      menuReset();
+      P.fake.msPerWord = 200;
+      select($('p1'), 'italic', $('p1'), 'words');
+      P._read(false);
+      await waitFor(() => speaks().length > 0);
+      getSelection().removeAllRanges();
+      key('ArrowDown');
+      await waitFor(() => speaks().length >= 2);
+      P.fake.msPerWord = 20;
+      await waitFor(() => speaks().length >= 4, 5000);
+      if (rd.state === 'off') throw 'stopped at the selection end';
+      rd.stop();
+    },
+    async 'menu: a selection ending on an element boundary stops there'() {
+      scrollTo(0, 0);
+      menuReset();
+      const r = document.createRange();
+      r.selectNodeContents($('p1'));
+      getSelection().removeAllRanges(); getSelection().addRange(r);
+      P._read(false);
+      await waitFor(() => rd.state === 'off' && speaks().length > 0, 5000);
+      getSelection().removeAllRanges();
+      const t = speaks().map(x => x.text);
+      if (!t[0].startsWith('The first paragraph')) throw JSON.stringify(t);
+      if (t.some(x => x.startsWith('Second paragraph'))) throw JSON.stringify(t);
+      if (R.hud.text() !== 'End of selection') throw R.hud.text();
+    },
+    async 'menu: a selection starting in a skipped citation reads the text after it'() {
+      scrollTo(0, 0);
+      menuReset();
+      select($('cite').querySelector('sup'), '12', $('cite'), 'sentence');
+      P._read(false);
+      await waitFor(() => rd.state === 'off' && speaks().length > 0, 5000);
+      getSelection().removeAllRanges();
+      if (lastSpeak() !== 'Another sentence') throw JSON.stringify(speaks().map(x => x.text));
+    },
+    async 'dynamic: current paragraph hidden mid-read moves on without stalling'() {
+      scrollTo(0, 0);
+      await fresh();
+      P.fake.msPerWord = 120;
+      await waitFor(() => sentText().startsWith('The first paragraph'), 5000);
+      const extra = document.createElement('p');
+      extra.textContent = 'Appended.';
+      try {
+        rd.st.model.builtAt = -1e9; // as if built long ago, so the change forces a rebuild
+        $('p1').setAttribute('aria-hidden', 'true');
+        document.body.append(extra);
+        P.fake.msPerWord = 20;
+        await waitFor(() => lastSpeak().startsWith('Second paragraph'), 5000);
+        if (!lastSpeak().startsWith('Second paragraph')) throw lastSpeak();
+        if (rd.state !== 'playing') throw rd.state;
+      } finally { $('p1').removeAttribute('aria-hidden'); extra.remove(); rd.stop(); }
+    },
+    async 'menu: a selection in a display contents wrapper reads'() {
+      menuReset();
+      $('pc').scrollIntoView({ block: 'center' });
+      select($('pc'), 'inside', $('pc'), 'wrapper');
+      P._read(false);
+      await waitFor(() => rd.state === 'off' && speaks().length > 0, 5000);
+      getSelection().removeAllRanges();
+      const t = speaks().map(x => x.text);
+      if (t[0] !== 'inside a display contents wrapper') throw JSON.stringify(t);
+    },
+    async 'menu: a selection in an aria-hidden pane still reads'() {
+      menuReset();
+      $('ap').scrollIntoView({ block: 'center' });
+      select($('ap'), 'marked', $('ap'), 'screen');
+      P._read(false);
+      await waitFor(() => rd.state === 'off' && speaks().length > 0, 5000);
+      getSelection().removeAllRanges();
+      const t = speaks().map(x => x.text);
+      if (t[0] !== 'marked hidden that is still on screen') throw JSON.stringify(t);
+      if (rd.st.lenient) throw 'lenient left on after stop';
+    },
+    'menu: a notice from the extension shows in the corner'() {
+      menuReset();
+      P._notice("Glint Reader can't reach the text inside that frame");
+      if (!/inside that frame/.test(R.hud.text())) throw R.hud.text();
+    },
+    async 'menu: a selection in a text field says it cannot be read'() {
+      scrollTo(0, 0);
+      menuReset();
+      getSelection().removeAllRanges();
+      const ta = $('ta');
+      ta.focus(); ta.setSelectionRange(0, 6);
+      P._read(false);
+      await wait(50);
+      ta.blur();
+      if (rd.state !== 'off') throw rd.state;
+      if (!/typing box/.test(R.hud.text())) throw R.hud.text();
+      if (speaks().length) throw 'spoke';
     },
     async 'no layout change: body HTML untouched while reading'() {
       rd.stop();

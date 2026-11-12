@@ -1,6 +1,6 @@
 # Privacy Policy for Glint Reader
 
-Effective: 2026-11-09
+Effective: 2026-11-12
 
 Published at https://navica.llc/tools/glint-reader/privacy/. Keep this file and that page in step.
 
@@ -11,7 +11,7 @@ nothing, and it sends nothing to us.
 ## What the extension reads
 
 - **Page text, only when you start it.** The extension can't see a page until you press the
-  shortcut or click its toolbar icon on that tab. It then reads the visible text of that page so
+  shortcut, click its toolbar icon, or choose Read aloud from the right-click menu on that tab. It then reads the visible text of that page so
   it can speak it and highlight each word. The text is used on the spot and is never stored or
   sent to us.
 

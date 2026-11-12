@@ -6,8 +6,10 @@
   const rd = R.reader, P = R.platform;
 
   P.on('toggle', () => rd.toggle());
+  P.on('read', toEnd => rd.readSelection(toEnd));
   P.on('tts', (id, ev) => rd.onTts(id, ev));
   P.on('preempted', () => rd.pause());
+  P.on('notice', text => rd.notice(text));
 
   const KEYS = {
     ' ': { fn: () => rd.togglePause() },

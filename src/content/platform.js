@@ -2,7 +2,7 @@
 (() => {
   const R = (globalThis.__rip ||= {});
   if (R.platform) return;
-  const L = { tts: [], toggle: [], preempted: [], settings: [] };
+  const L = { tts: [], toggle: [], read: [], preempted: [], settings: [], notice: [] };
 
   const send = msg => {
     try {
@@ -29,10 +29,16 @@
     if (msg.type === 'toggle') {
       L.toggle.forEach(f => f());
       respond({ ok: true });
+    } else if (msg.type === 'read') {
+      L.read.forEach(f => f(msg.toEnd));
+      respond({ ok: true });
     } else if (msg.type === 'tts') {
       L.tts.forEach(f => f(msg.id, msg.ev));
     } else if (msg.type === 'preempted') {
       L.preempted.forEach(f => f());
+    } else if (msg.type === 'notice') {
+      L.notice.forEach(f => f(msg.text));
+      respond({ ok: true });
     }
   });
 

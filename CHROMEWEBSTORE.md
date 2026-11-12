@@ -27,7 +27,8 @@ Accessibility (alternative: Productivity)
 
 **Single Purpose**
 Glint Reader reads the current web page aloud and highlights each word on the page as it is
-spoken. The user starts and stops it on a tab, moves through the text with the keyboard or by
+spoken. The user starts and stops it on a tab, or reads selected text from the right-click
+menu, moves through the text with the keyboard or by
 clicking, and changes the speed and voice.
 
 **Primary Language**
@@ -62,8 +63,9 @@ Render with `store/screenshots/render.sh` (headless Chrome, real content scripts
 |------------|------|---------------|
 | tts | permissions | Speaks the page's text with the voices available in Chrome, and receives word events so the extension can highlight the word being spoken. Also speaks a short sentence silently (volume 0) at rising speeds to measure how fast the user's voice can really go. |
 | storage | permissions | Saves the user's settings (voice, speed, and highlight colors) and each measured voice's speed table and pace, so the speed shown matches the speed heard. Nothing is sent anywhere. |
-| activeTab | permissions | Gives access to the current tab only when the user presses the shortcut or clicks the toolbar icon there. The extension has no host permissions and can't see any page otherwise. |
+| activeTab | permissions | Gives access to the current tab only when the user presses the shortcut, clicks the toolbar icon, or picks a Glint Reader item from the right-click menu there. The extension has no host permissions and can't see any page otherwise. |
 | scripting | permissions | Injects the reader's scripts and highlight styles into the tab the user just started it on, using the access activeTab grants. All scripts ship in the package. |
+| contextMenus | permissions | Adds a Glint Reader submenu with "Read aloud" and "Read aloud from here" to the right-click menu when text is selected. Choosing one starts the reader on that tab, which grants activeTab access the same way the toolbar icon does. |
 | (none) | host_permissions | None requested. |
 
 **Remote code:** No. All code ships in the package.
@@ -130,6 +132,8 @@ https://navica.llc/tools/glint-reader/ (also the manifest `homepage_url`)
 
 | Version | Date | Changes | Status |
 |---------|------|---------|--------|
+| 0.2.5 | 2026-11-12 | Reads email bodies in Karbon and other pages that wrap text in display: contents, text shown inside a hidden box, and selections inside frames. | Draft |
+| 0.2.4 | 2026-11-12 | Right-click menu on selected text: Read aloud reads just the selection, and Read aloud from here reads on to the end of the page. Adds the contextMenus permission. | Draft |
 | 0.2.3 | 2026-11-10 | Measures the voice automatically after install and update, and stops measuring if reading starts. Unmeasured Google voices start at a 3.5x top speed. | Draft |
 | 0.2.2 | 2026-11-10 | Speeds are now the speed you hear: Google's online voices speed up by about rate squared, so the extension corrects for it. Word highlighting follows the voice's measured pace. | Draft |
 | 0.2.1 | 2026-11-10 | Clear messages when Chrome has no voices or a voice fails. | Draft |
@@ -138,8 +142,9 @@ https://navica.llc/tools/glint-reader/ (also the manifest `homepage_url`)
 ## Review Notes
 
 ### Known Issues / Limitations
-- Can't read Chrome's PDF viewer, canvas-drawn pages such as Google Docs, text in frames,
-  Chrome's own pages, or the Chrome Web Store. The toolbar icon shows a red ! there.
+- Can't read Chrome's PDF viewer, canvas-drawn pages such as Google Docs, text in shadow DOM,
+  Chrome's own pages, or the Chrome Web Store. Text in frames is read only through the
+  right-click menu, and not in frames from another site. The toolbar icon shows a red ! there.
 - Google's online voices report no word positions, so their highlighting is estimated, and
   they hang above engine rate 2. Their top speed measures about 3.75x.
 - Chrome installed as a Linux Flatpak has only Google's online voices. Its sandbox can't reach

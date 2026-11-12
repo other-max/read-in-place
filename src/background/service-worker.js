@@ -2,7 +2,10 @@
 importScripts('../shared/common.js');
 const C = globalThis.RIP_COMMON;
 
-let active = null; // { tabId, id } of the utterance currently speaking
+let active = null; // { tabId, frameId, id } of the utterance currently speaking
+// Frame of each tab whose reader is on. Usually the top frame (0), but a selection read in an
+// iframe (an email body, an embedded document) runs the reader inside that frame.
+const readerFrame = new Map();
 
 chrome.action.onClicked.addListener(tab => toggle(tab));
 chrome.commands.onCommand.addListener((cmd, tab) => {
@@ -15,29 +18,57 @@ async function activeTab(tab) {
   return t;
 }
 
-async function toggle(tab) {
+// Right-click menu on selected text. Our own parent item, since Chrome would otherwise title
+// the group with the manifest's full store name.
+const MENU = {
+  'glint-read-selection': { title: 'Read aloud', whole: false },
+  'glint-read-from-here': { title: 'Read aloud from here', whole: true },
+};
+function makeMenus() {
+  chrome.contextMenus.removeAll(() => {
+    chrome.contextMenus.create({ id: 'glint', title: 'Glint Reader', contexts: ['selection'] });
+    for (const [id, m] of Object.entries(MENU)) {
+      chrome.contextMenus.create({ id, parentId: 'glint', title: m.title, contexts: ['selection'] });
+    }
+  });
+}
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  const m = MENU[info.menuItemId];
+  // Read where the selection is: it may be inside a frame, which has its own selection.
+  if (m) toPage(tab, { type: 'read', toEnd: m.whole }, info.frameId || 0);
+});
+
+const toggle = tab => toPage(tab, { type: 'toggle' });
+
+// Sends a command to the reader in a frame of the tab, loading the content scripts first if
+// needed. Without a frame: the frame already reading, or else the top frame.
+async function toPage(tab, msg, frameId) {
   tab = await activeTab(tab);
   if (!tab?.id) return;
-  const target = { tabId: tab.id };
+  frameId ??= readerFrame.get(tab.id) ?? 0;
+  const target = { tabId: tab.id, frameIds: [frameId] };
   const s = await chrome.storage.sync.get(C.DEFAULTS);
   try {
     await chrome.scripting.insertCSS({ target, css: C.cssFor(s) });
-  } catch (e) {
-    return flash(tab.id); // chrome:// pages, the Web Store, and similar are off limits
-  }
-  if (await send(tab.id, { type: 'toggle' })) return;
-  try {
+    if (await send(tab.id, msg, frameId)) return;
     await chrome.scripting.executeScript({ target, files: C.CONTENT_FILES });
-    await send(tab.id, { type: 'toggle' });
+    if (await send(tab.id, msg, frameId)) return;
+    throw new Error('no reply from the reader');
   } catch (e) {
+    // chrome:// pages, the Web Store, and frames from another site that the click didn't
+    // grant access to are off limits.
     console.warn('Glint Reader: could not start on this page', e);
     flash(tab.id);
+    if (frameId !== 0) {
+      readerFrame.delete(tab.id);
+      toPage(tab, { type: 'notice', text: "Glint Reader can't reach the text inside that frame" }, 0);
+    }
   }
 }
 
-async function send(tabId, msg) {
+async function send(tabId, msg, frameId = 0) {
   try {
-    return await chrome.tabs.sendMessage(tabId, msg, { frameId: 0 });
+    return await chrome.tabs.sendMessage(tabId, msg, { frameId });
   } catch {
     return undefined;
   }
@@ -57,7 +88,7 @@ function badge(tabId, state) {
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, respond) => {
-  const tabId = sender.tab?.id;
+  const tabId = sender.tab?.id, frameId = sender.frameId ?? 0;
   switch (msg.type) {
     case 'glintEvent': // from the offscreen page that plays the built-in voices
       if (engine?.id === msg.id) {
@@ -66,15 +97,18 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
       }
       break;
     case 'speak':
-      speak(tabId, msg);
+      speak(tabId, frameId, msg);
       break;
     case 'stop':
-      if (!active || active.tabId === tabId) {
+      if (!active || (active.tabId === tabId && active.frameId === frameId)) {
         chrome.tts.stop();
         active = null;
       }
       break;
     case 'state':
+      if (tabId == null) break;
+      if (msg.state !== 'off') readerFrame.set(tabId, frameId);
+      else if (readerFrame.get(tabId) === frameId) readerFrame.delete(tabId);
       badge(tabId, msg.state);
       break;
     case 'voiceInfo':
@@ -91,15 +125,17 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
   }
 });
 
-async function speak(tabId, msg) {
+async function speak(tabId, frameId, msg) {
   if (tabId == null) return;
   if (calibrating) yieldToReader = true; // reading wins; measuring stops at its next step
-  if (active && active.tabId !== tabId) send(active.tabId, { type: 'preempted' });
-  active = { tabId, id: msg.id };
+  if (active && (active.tabId !== tabId || active.frameId !== frameId)) {
+    send(active.tabId, { type: 'preempted' }, active.frameId);
+  }
+  active = { tabId, frameId, id: msg.id };
   const relay = ev => chrome.tabs.sendMessage(tabId, {
     type: 'tts', id: msg.id,
     ev: { type: ev.type, charIndex: ev.charIndex, errorMessage: ev.errorMessage },
-  }, { frameId: 0 }).catch(() => {});
+  }, { frameId }).catch(() => {});
   const [voices, { caps = {} }] = await Promise.all([chrome.tts.getVoices(), chrome.storage.local.get('caps')]);
   if (active?.id !== msg.id) return; // a newer sentence started while we looked up the voice
   const v = voices.find(x => x.voiceName === msg.voiceName);
@@ -169,10 +205,13 @@ chrome.ttsEngine.onPause.addListener(() => toOffscreen({ type: 'pause' }));
 chrome.ttsEngine.onResume.addListener(() => toOffscreen({ type: 'resume' }));
 
 chrome.tabs.onRemoved.addListener(tabId => {
+  readerFrame.delete(tabId);
   if (active?.tabId === tabId) { chrome.tts.stop(); active = null; }
 });
 chrome.tabs.onUpdated.addListener((tabId, info) => {
-  if (info.status === 'loading' && active?.tabId === tabId) { chrome.tts.stop(); active = null; }
+  if (info.status !== 'loading') return;
+  readerFrame.delete(tabId);
+  if (active?.tabId === tabId) { chrome.tts.stop(); active = null; }
 });
 
 async function voiceInfo(name, lang) {
@@ -261,6 +300,7 @@ async function runCalibration(name) {
 // Measure the user's voice silently after install or update, unless it's already measured.
 // Entries from before 0.2.2 have no pace (cps), so an update redoes them.
 chrome.runtime.onInstalled.addListener(async d => {
+  makeMenus();
   if (d.reason !== 'install' && d.reason !== 'update') return;
   const { voiceName } = await chrome.storage.sync.get(C.DEFAULTS);
   const info = await voiceInfo(voiceName);
