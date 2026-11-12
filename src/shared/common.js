@@ -19,6 +19,19 @@
   const PREFERRED = ['Samantha', 'Ava', 'Allison', 'Zoe', 'Evan', 'Nathan', 'Tom', 'Susan',
     'Alex', 'Daniel', 'Karen', 'Moira', 'Tessa', 'Serena'];
 
+  // Voices that ship inside the extension (src/voice). The model makes speech up to
+  // maxModelSpeed faster itself; past that, playback is sped up with pitch kept.
+  const GLINT = {
+    maxModelSpeed: 1.75,
+    voices: [
+      { id: 'af_heart', voiceName: 'Heart (Glint built-in)', lang: 'en-US', gender: 'female' },
+      { id: 'af_bella', voiceName: 'Bella (Glint built-in)', lang: 'en-US', gender: 'female' },
+      { id: 'am_michael', voiceName: 'Michael (Glint built-in)', lang: 'en-US', gender: 'male' },
+      { id: 'bf_emma', voiceName: 'Emma (Glint built-in)', lang: 'en-GB', gender: 'female' },
+    ],
+  };
+  const isGlint = name => GLINT.voices.some(v => v.voiceName === name);
+
   const baseName = v => (v.voiceName || '').split(' (')[0];
   const hasWord = v => !!v.eventTypes?.includes('word');
 
@@ -100,5 +113,5 @@
   const fmt = r => (Math.round(r * 100) / 100).toString();
 
   globalThis.RIP_COMMON = { DEFAULTS, STEPS, CONTENT_FILES, pickVoice, capFor, engineRate, stepsFor, cssFor,
-    hasWord, fmt };
+    hasWord, fmt, GLINT, isGlint };
 })();

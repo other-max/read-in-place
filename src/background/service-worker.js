@@ -59,6 +59,12 @@ function badge(tabId, state) {
 chrome.runtime.onMessage.addListener((msg, sender, respond) => {
   const tabId = sender.tab?.id;
   switch (msg.type) {
+    case 'glintEvent': // from the offscreen page that plays the built-in voices
+      if (engine?.id === msg.id) {
+        engine.send(msg.ev);
+        if (['end', 'error'].includes(msg.ev.type)) engine = null;
+      }
+      break;
     case 'speak':
       speak(tabId, msg);
       break;
@@ -105,7 +111,62 @@ async function speak(tabId, msg) {
   } catch (e) {
     relay({ type: 'error', errorMessage: String(e?.message || e) });
   }
+  // Built-in voices take a moment to make speech, so start on the next sentence now.
+  if (msg.next && C.isGlint(msg.voiceName)) {
+    toOffscreen({ type: 'prefetch', text: msg.next, voiceName: msg.voiceName, rate: opts.rate });
+  }
 }
+
+// ---- built-in voices ----
+// The extension is also a speech engine (chrome.ttsEngine), so its voices show up in
+// chrome.tts like any other. The model runs and plays in an offscreen page.
+
+let engine = null; // { id, send } for the utterance our engine is speaking
+let engineSeq = 0;
+let offscreenReady = null;
+
+function ensureOffscreen() {
+  offscreenReady ||= (async () => {
+    const have = await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] });
+    if (!have.length) {
+      await chrome.offscreen.createDocument({
+        url: 'voice/offscreen.html',
+        reasons: ['AUDIO_PLAYBACK', 'WORKERS'],
+        justification: 'Plays the built-in voices, which run on this device.',
+      });
+    }
+  })().catch(e => { offscreenReady = null; throw e; });
+  return offscreenReady;
+}
+
+async function toOffscreen(msg) {
+  try {
+    await ensureOffscreen();
+    await chrome.runtime.sendMessage({ target: 'glint-offscreen', ...msg });
+  } catch (e) {
+    offscreenReady = null; // the page was closed; make it again next time
+    console.warn('Glint Reader: built-in voice unavailable', e);
+    return false;
+  }
+  return true;
+}
+
+chrome.ttsEngine.onSpeak.addListener(async (text, options, sendTtsEvent) => {
+  const id = ++engineSeq;
+  engine = { id, send: sendTtsEvent };
+  const ok = await toOffscreen({ type: 'speak', id, text, voiceName: options.voiceName,
+    rate: options.rate ?? 1, volume: options.volume ?? 1 });
+  if (!ok && engine?.id === id) {
+    sendTtsEvent({ type: 'error', errorMessage: 'The built-in voice could not start.' });
+    engine = null;
+  }
+});
+chrome.ttsEngine.onStop.addListener(() => {
+  engine = null;
+  toOffscreen({ type: 'stop' });
+});
+chrome.ttsEngine.onPause.addListener(() => toOffscreen({ type: 'pause' }));
+chrome.ttsEngine.onResume.addListener(() => toOffscreen({ type: 'resume' }));
 
 chrome.tabs.onRemoved.addListener(tabId => {
   if (active?.tabId === tabId) { chrome.tts.stop(); active = null; }
@@ -119,11 +180,13 @@ async function voiceInfo(name, lang) {
   const v = (name && voices.find(x => x.voiceName === name)) ||
     C.pickVoice(voices, lang || navigator.language);
   const { caps = {} } = await chrome.storage.local.get('caps');
+  if (C.isGlint(v?.voiceName)) toOffscreen({ type: 'warm' }); // load the model before it's needed
   return {
     none: !voices.length, // e.g. Chrome as a Linux Flatpak, which can't reach the system's voices
     voiceName: v?.voiceName || '',
     hasWord: v ? C.hasWord(v) : false,
     remote: !!v?.remote,
+    builtIn: C.isGlint(v?.voiceName), // makes speech on this device, so the first words take a moment
     cap: C.capFor(v, caps),
     cps: caps[v?.voiceName]?.cps || 0, // characters per second at 1x, for estimated word timing
     measured: !!(v && caps[v.voiceName]?.best),
@@ -201,5 +264,6 @@ chrome.runtime.onInstalled.addListener(async d => {
   if (d.reason !== 'install' && d.reason !== 'update') return;
   const { voiceName } = await chrome.storage.sync.get(C.DEFAULTS);
   const info = await voiceInfo(voiceName);
-  if (!info.none && !info.cps) calibrate(voiceName);
+  // Built-in voices need no measuring: their speed is set exactly.
+  if (!info.none && !info.cps && !info.builtIn) calibrate(voiceName);
 });

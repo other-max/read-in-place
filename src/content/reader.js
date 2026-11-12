@@ -113,11 +113,14 @@
     const u = (st.utt = { id, start, end: s.end, gotWord: false, startedAt: 0 });
     paintSentence();
     paintWord(start);
-    P.speak(id, b.text.slice(start, s.end), { rate: st.rate, voiceName: st.voice.voiceName });
-    // If the voice never reports "start", fall back to timing from now.
+    const n = stepSentence(st.pos, +1), nb = n && st.model.blocks[n.b], ns = nb && M.sentences(nb)[n.s];
+    P.speak(id, b.text.slice(start, s.end), { rate: st.rate, voiceName: st.voice.voiceName,
+      next: ns ? nb.text.slice(ns.start, ns.end) : '' });
+    // If the voice never reports "start", fall back to timing from now. Built-in voices
+    // always report it, but loading the model the first time can take several seconds.
     st.est = setTimeout(() => {
       if (st.utt === u && !u.startedAt && !u.gotWord) estimate(u, performance.now());
-    }, 1500);
+    }, st.voice.builtIn ? 30000 : 1500);
   }
 
   // For voices without word events: walk the words at an estimated pace.

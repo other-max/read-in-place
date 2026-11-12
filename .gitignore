@@ -11,3 +11,6 @@
 
 # Rendered store images
 /store/screenshots/.work/
+
+# Built-in voice model (92 MB). Fetch it with scripts/fetch-voice.sh.
+/src/voice/model/kokoro.onnx

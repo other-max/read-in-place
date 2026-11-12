@@ -6,7 +6,24 @@
   "description": "Reads any web page aloud right where it is, highlighting each word on the page as it is spoken.",
   "homepage_url": "https://navica.llc/tools/glint-reader/",
   "minimum_chrome_version": "128",
-  "permissions": ["tts", "storage", "activeTab", "scripting"],
+  "permissions": ["tts", "ttsEngine", "offscreen", "storage", "activeTab", "scripting"],
+  "tts_engine": {
+    "voices": [
+      { "voice_name": "Heart (Glint built-in)", "lang": "en-US",
+        "event_types": ["start", "word", "end", "error"] },
+      { "voice_name": "Bella (Glint built-in)", "lang": "en-US",
+        "event_types": ["start", "word", "end", "error"] },
+      { "voice_name": "Michael (Glint built-in)", "lang": "en-US",
+        "event_types": ["start", "word", "end", "error"] },
+      { "voice_name": "Emma (Glint built-in)", "lang": "en-GB",
+        "event_types": ["start", "word", "end", "error"] }
+    ]
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  },
+  "cross_origin_embedder_policy": { "value": "require-corp" },
+  "cross_origin_opener_policy": { "value": "same-origin" },
   "background": {
     "service_worker": "background/service-worker.js"
   },
