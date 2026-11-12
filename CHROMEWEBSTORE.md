@@ -132,6 +132,7 @@ https://navica.llc/tools/glint-reader/ (also the manifest `homepage_url`)
 
 | Version | Date | Changes | Status |
 |---------|------|---------|--------|
+| 0.2.6 | 2026-11-12 | Reads text inside web components (open shadow roots), such as MSN articles and Salesforce-style apps. Highlighting, clicks, the right-click menu, and scrolling work there too. No new permissions. | Draft |
 | 0.2.5 | 2026-11-12 | Reads email bodies in Karbon and other pages that wrap text in display: contents, text shown inside a hidden box, and selections inside frames. | Draft |
 | 0.2.4 | 2026-11-12 | Right-click menu on selected text: Read aloud reads just the selection, and Read aloud from here reads on to the end of the page. Adds the contextMenus permission. | Draft |
 | 0.2.3 | 2026-11-10 | Measures the voice automatically after install and update, and stops measuring if reading starts. Unmeasured Google voices start at a 3.5x top speed. | Draft |
@@ -142,8 +143,10 @@ https://navica.llc/tools/glint-reader/ (also the manifest `homepage_url`)
 ## Review Notes
 
 ### Known Issues / Limitations
-- Can't read Chrome's PDF viewer, canvas-drawn pages such as Google Docs, text in shadow DOM,
-  Chrome's own pages, or the Chrome Web Store. Text in frames is read only through the
+- Can't read Chrome's PDF viewer, canvas-drawn pages such as Google Docs, text in closed
+  shadow roots, Chrome's own pages, or the Chrome Web Store. Open shadow roots are read
+  (0.2.6). Before Chrome 137, a selection that crosses into or out of a component may be
+  read only in part from the right-click menu. Text in frames is read only through the
   right-click menu, and not in frames from another site. The toolbar icon shows a red ! there.
 - Google's online voices report no word positions, so their highlighting is estimated, and
   they hang above engine rate 2. Their top speed measures about 3.75x.

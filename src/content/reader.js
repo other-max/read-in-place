@@ -37,20 +37,31 @@
 
   async function loadSettings() {
     const s = await P.getSettings();
+    hl.colors(s);
     const v = await P.voiceInfo(s.voiceName);
     if (v) st.voice = v;
     st.rate = clampRate(s.rate || 1);
   }
 
+  const WATCH = { childList: true, subtree: true, characterData: true };
+
   function rebuild() {
     st.model = M.build(document.body, { lenient: st.lenient });
     st.dirty = false;
+    watchRoots();
+  }
+
+  // Changes inside a shadow root don't reach an observer on the body, so watch each open
+  // shadow root the model read as well.
+  function watchRoots() {
+    if (st.mo) for (const r of st.model.roots) st.mo.observe(r, WATCH);
   }
 
   function observe() {
     st.mo?.disconnect();
     st.mo = new MutationObserver(() => { st.dirty = true; });
-    st.mo.observe(document.body, { childList: true, subtree: true, characterData: true });
+    st.mo.observe(document.body, WATCH);
+    watchRoots();
   }
 
   function posAt(node, offset) {
@@ -62,31 +73,55 @@
     return { b: loc.b, s, off: M.wordAt(b, ss[s], loc.off).start };
   }
 
+  // The selection as { startContainer, startOffset, endContainer, endOffset }. Where Chrome
+  // has getComposedRanges() (137 and up), its ends can sit inside open shadow roots; the
+  // older getRangeAt() moves an end that is inside a shadow tree out to the host.
   function selRange() {
     const sel = getSelection();
-    if (!sel?.rangeCount || sel.isCollapsed || !sel.toString().trim()) return null;
+    if (!sel?.rangeCount || !sel.toString().trim()) return null;
+    if (sel.getComposedRanges) {
+      try {
+        const r = sel.getComposedRanges({ shadowRoots: M.shadowRoots() })[0];
+        if (r && !r.collapsed) return r;
+      } catch { /* fall back to getRangeAt */ }
+    }
+    if (sel.isCollapsed) return null;
     return sel.getRangeAt(0).cloneRange();
   }
 
+  const isChars = n => n.nodeType === 3 || n.nodeType === 4 || n.nodeType === 8;
+
   // The first and last points of a range that fall in text the reader reads, so a selection
   // that starts in a citation or ends on an element boundary still maps to the words in it.
+  // Works on the model's text in flat tree order, so the ends can be in different trees.
   function rangePoints(r) {
-    const ok = n => st.model.where.get(n)?.block.i !== undefined;
-    const root = r.commonAncestorContainer;
-    const nodes = [];
-    if (root.nodeType === 3) nodes.push(root);
-    else {
-      const tw = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-      for (let n; (n = tw.nextNode());) nodes.push(n);
-    }
-    let start = null, end = null;
-    for (const n of nodes) {
-      if (!ok(n) || !r.intersectsNode(n)) continue;
-      const a = n === r.startContainer ? r.startOffset : 0;
-      const e = n === r.endContainer ? r.endOffset : n.length;
-      if (a >= n.length || e <= 0) continue; // only touches the edge of this text
-      start ||= [n, a];
-      end = [n, e];
+    const sc = r.startContainer, so = r.startOffset, ec = r.endContainer, eo = r.endOffset;
+    const atOrAfterStart = n => {
+      if (n === sc) return true;
+      if (isChars(sc)) return M.flatCompare(sc, n) < 0;
+      const x = sc.childNodes[so];
+      if (x) return M.flatCompare(x, n) <= 0;
+      return M.flatCompare(sc, n) < 0 && !M.flatContains(sc, n);
+    };
+    const atOrBeforeEnd = n => {
+      if (n === ec) return true;
+      if (isChars(ec)) return M.flatCompare(n, ec) < 0;
+      const y = eo > 0 && ec.childNodes[eo - 1];
+      if (y) return M.flatCompare(n, y) <= 0 || M.flatContains(y, n);
+      return M.flatCompare(n, ec) < 0;
+    };
+    let start = null, end = null, inside = false;
+    for (const b of st.model.blocks) {
+      for (const { node: n } of b.segs) {
+        if (!n) continue;
+        if (!inside && !(inside = atOrAfterStart(n))) continue;
+        if (!atOrBeforeEnd(n)) return start && { start, end };
+        const a = n === sc ? so : 0;
+        const e = n === ec ? eo : n.length;
+        if (a >= n.length || e <= 0) continue; // only touches the edge of this text
+        start ||= [n, a];
+        end = [n, e];
+      }
     }
     return start && { start, end };
   }
@@ -248,19 +283,21 @@
 
   function paintSentence() {
     const b = block(), s = sent();
-    hl.sentence(M.rangeOf(b, s.start, st.utt?.end ?? s.end));
+    hl.sentence(M.rangesOf(b, s.start, st.utt?.end ?? s.end));
   }
 
   function paintWord(off) {
     const b = block(), w = M.wordAt(b, sent(), off);
     st.pos.off = w.start;
-    const r = M.rangeOf(b, w.start, w.end);
-    hl.word(r);
-    if (r) follow(r);
+    const rs = M.rangesOf(b, w.start, w.end);
+    hl.word(rs);
+    if (rs[0]) follow(rs[0]);
   }
 
+  // The nearest box that scrolls, climbing out of shadow roots and slots as drawn.
   function scroller(el) {
-    for (let e = el; e && e !== document.body && e !== document.documentElement; e = e.parentElement) {
+    for (let e = el; e?.nodeType === 1 && e !== document.body && e !== document.documentElement;
+      e = M.flatParent(e)) {
       const oy = getComputedStyle(e).overflowY;
       if (/(auto|scroll|overlay)/.test(oy) && e.scrollHeight > e.clientHeight + 4) return e;
     }
@@ -273,7 +310,7 @@
     if (now - st.userScrollAt < 4000 || now < st.autoScrollUntil) return;
     const rect = r.getBoundingClientRect();
     if (!rect.width && !rect.height) return;
-    const sc = scroller(r.startContainer.parentElement);
+    const sc = scroller(M.flatParent(r.startContainer));
     const box = sc ? sc.getBoundingClientRect() : { top: 0, height: innerHeight };
     const top = rect.top - box.top, h = Math.min(box.height, innerHeight);
     if (top >= h * 0.12 && rect.bottom - box.top <= h * 0.82) return;
@@ -368,6 +405,7 @@
     P.setState('off');
     hl.clear();
     st.mo?.disconnect();
+    st.mo = null;
     clearInterval(st.beat);
     hud.hide();
   }
@@ -461,6 +499,7 @@
 
   P.on('settings', async changes => {
     if (st.state === 'off') return;
+    if (changes.wordColor || changes.sentenceColor) hl.colors(await P.getSettings());
     if (changes.voiceName || changes.caps) {
       const s = await P.getSettings();
       const v = await P.voiceInfo(s.voiceName);

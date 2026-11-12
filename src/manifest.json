@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Glint Reader: reads any web page aloud, word by word",
   "short_name": "Glint Reader",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "Reads any web page aloud right where it is, highlighting each word on the page as it is spoken.",
   "homepage_url": "https://navica.llc/tools/glint-reader/",
   "minimum_chrome_version": "128",

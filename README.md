@@ -7,7 +7,7 @@ reflow. Click where you want it to start, jump around with keys, and watch each 
 highlight on the real page as it's spoken. Speed goes from 0.5x up to the fastest your
 voice can really go, which is usually well past 2x for on-device voices.
 
-Status: v0.2.5. Design notes and decisions are in `notes/PLAN.md`.
+Status: v0.2.6. Design notes and decisions are in `notes/PLAN.md`.
 
 ## Install
 

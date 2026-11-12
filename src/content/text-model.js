@@ -24,6 +24,65 @@
     }
   }
 
+  // ---- the flat tree: the page as drawn, with open shadow roots and slots filled in ----
+  // Closed shadow roots stay out: el.shadowRoot is null for them, so their light DOM
+  // children are walked as before and checkVisibility() drops the ones that don't show.
+
+  // Children as drawn: an open shadow root's content instead of the host's own children, and
+  // a slot's assigned nodes (or its fallback content when nothing is assigned).
+  function flatKids(n) {
+    if (n.shadowRoot) return n.shadowRoot.childNodes;
+    if (n.localName === 'slot' && n.assignedNodes) {
+      const a = n.assignedNodes({ flatten: true });
+      if (a.length) return a;
+    }
+    return n.childNodes;
+  }
+
+  const isShadowRoot = n => n?.nodeType === 11 && !!n.host;
+
+  // Parent as drawn: the slot a node is assigned to, or the host for a shadow root's children.
+  // assignedSlot is null when the slot is in a closed shadow root.
+  function flatParent(n) {
+    if (n.assignedSlot) return n.assignedSlot;
+    const p = n.parentNode;
+    return isShadowRoot(p) ? p.host : p;
+  }
+
+  function flatPath(n) {
+    const out = [];
+    for (let x = n; x; x = flatParent(x)) out.push(x);
+    return out.reverse();
+  }
+
+  // Order in the flat tree: -1 if a comes first, 1 if b does, 0 if they are the same node.
+  // Ancestors come before their descendants. Light DOM only, this is document order.
+  function flatCompare(a, b) {
+    if (a === b) return 0;
+    const pa = flatPath(a), pb = flatPath(b);
+    let i = 0;
+    while (i < pa.length && i < pb.length && pa[i] === pb[i]) i++;
+    if (i === pa.length) return -1;
+    if (i === pb.length) return 1;
+    // Same flat parent, so they are siblings in one shadow root, one host, or one slot's
+    // assigned nodes, which are in tree order.
+    return pa[i].compareDocumentPosition(pb[i]) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+  }
+
+  const flatContains = (a, n) => flatPath(n).includes(a);
+
+  // Every open shadow root in the page, for Selection.getComposedRanges().
+  function shadowRoots(root = document, out = []) {
+    const tw = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+    for (let n = tw.nextNode(); n; n = tw.nextNode()) {
+      if (n.shadowRoot) {
+        out.push(n.shadowRoot);
+        shadowRoots(n.shadowRoot, out);
+      }
+    }
+    return out;
+  }
+
   // lenient: also read aria-hidden and screen-reader-only text. Used when the user selected
   // text the strict pass left out, since text they could select is text they can see.
   function build(root = document.body, { lenient = false } = {}) {
@@ -34,10 +93,6 @@
       return s;
     };
     const isInline = el => /^(inline|contents|ruby)/.test(cs(el).display);
-    const blockOf = el => {
-      while (el && el !== root && isInline(el)) el = el.parentElement;
-      return el || root;
-    };
     // Gone with everything inside it. Two traps here, both seen on real sites:
     // - display: contents draws no box, so checkVisibility() says false even though its
     //   children show (Tailwind's "contents" wrapper around Karbon's email bodies).
@@ -57,43 +112,55 @@
 
     const blocks = [];
     const where = new Map();
+    const roots = new Set(); // open shadow roots read, so the reader can watch them for changes
     let cur = null;
-    const tw = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
-      acceptNode(n) {
-        if (n.nodeType === 3) {
-          return cs(n.parentElement).visibility === 'visible' ? NodeFilter.FILTER_ACCEPT :
-            NodeFilter.FILTER_SKIP;
-        }
-        if (SKIP.has(n.localName) || gone(n)) return NodeFilter.FILTER_REJECT;
-        if (n.localName === 'sup' && REF.test(n.textContent)) return NodeFilter.FILTER_REJECT;
-        return n.localName === 'br' ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
-      },
-    });
 
-    for (let n; (n = tw.nextNode());) {
-      const b = blockOf(n.parentElement);
-      if (n.nodeType === 1) { // <br>: a space so lines don't run together
-        if (cur && cur.el === b) {
-          cur.segs.push({ node: null, start: cur.text.length, end: cur.text.length + 1 });
-          cur.text += ' ';
+    // Walks the flat tree, the order the page is drawn in: into open shadow roots, and through
+    // slots to the light DOM nodes assigned to them, so slotted text is read once, where it
+    // shows. el: the element whose children to read. b: the block those children belong to.
+    function visit(el, b) {
+      if (el.shadowRoot) roots.add(el.shadowRoot);
+      for (const n of flatKids(el)) {
+        if (n.nodeType === 3) {
+          if (cs(el).visibility === 'visible') addText(n, b);
+          continue;
         }
-        continue;
+        if (n.nodeType !== 1) continue;
+        if (SKIP.has(n.localName) || gone(n)) continue;
+        if (n.localName === 'sup' && REF.test(n.textContent)) continue;
+        if (n.localName === 'br') { // a space so lines don't run together
+          if (cur && cur.el === b) {
+            cur.segs.push({ node: null, start: cur.text.length, end: cur.text.length + 1 });
+            cur.text += ' ';
+          }
+          continue;
+        }
+        visit(n, isInline(n) ? b : n);
       }
+    }
+
+    function addText(n, b) {
       const data = n.data;
-      if (!data) continue;
+      if (!data) return;
+      const scope = n.getRootNode();
       if (!cur || cur.el !== b) {
-        if (!/\S/.test(data)) continue;
-        cur = { el: b, text: '', segs: [], sents: null };
+        if (!/\S/.test(data)) return;
+        cur = { el: b, text: '', segs: [], sents: null, scope, mixed: false };
         blocks.push(cur);
       }
+      // Text from more than one tree (an inline component inside a paragraph) needs one
+      // Range per tree: a Range can't cross a shadow boundary.
+      if (scope !== cur.scope) cur.mixed = true;
       where.set(n, { block: cur, seg: cur.segs.length });
       cur.segs.push({ node: n, start: cur.text.length, end: cur.text.length + data.length });
       cur.text += data.replace(/\s/g, ' ');
     }
 
+    visit(root, root);
+
     const out = blocks.filter(b => WORDISH.test(b.text));
     out.forEach((b, i) => { b.i = i; });
-    return { blocks: out, where, root, builtAt: performance.now() };
+    return { blocks: out, where, root, roots, builtAt: performance.now() };
   }
 
   function sentences(block) {
@@ -144,8 +211,9 @@
     return ws.find(w => w.end > off) || ws[ws.length - 1];
   };
 
-  // Block offset -> [textNode, offset]. Synthetic <br> spaces snap to the nearest real text.
-  function domPoint(block, off, isEnd) {
+  // Block offset -> [segment index, offset in its text node], or null. Synthetic <br> spaces
+  // snap to the nearest real text.
+  function segPoint(block, off, isEnd) {
     const segs = block.segs;
     let lo = 0, hi = segs.length - 1;
     while (lo < hi) {
@@ -159,31 +227,90 @@
       else while (i < segs.length - 1 && !segs[i].node) i++;
       const n = segs[i].node;
       if (!n) return null;
-      return isEnd ? [n, n.length] : [n, 0];
+      return isEnd ? [i, n.length] : [i, 0];
     }
     const s = segs[i];
-    return [s.node, Math.max(0, Math.min(off - s.start, s.node.length))];
+    return [i, Math.max(0, Math.min(off - s.start, s.node.length))];
   }
 
-  function rangeOf(block, a, e) {
-    const p = domPoint(block, a, false), q = domPoint(block, e, true);
-    if (!p || !q) return null;
+  // Block offset -> [textNode, offset].
+  function domPoint(block, off, isEnd) {
+    const p = segPoint(block, off, isEnd);
+    return p && [block.segs[p[0]].node, p[1]];
+  }
+
+  function makeRange(n1, o1, n2, o2) {
     try {
       const r = document.createRange();
-      r.setStart(p[0], p[1]);
-      r.setEnd(q[0], q[1]);
+      r.setStart(n1, o1);
+      r.setEnd(n2, o2);
       return r;
     } catch {
       return null;
     }
   }
 
+  // The Ranges covering block text a..e: one, or one per run of text in the same tree when
+  // the block mixes light DOM and shadow DOM text. A Range across trees would collapse, and
+  // one around a shadow host doesn't cover the text drawn inside it.
+  function rangesOf(block, a, e) {
+    const p = segPoint(block, a, false), q = segPoint(block, e, true);
+    if (!p || !q) return [];
+    const segs = block.segs;
+    if (!block.mixed) {
+      const r = makeRange(segs[p[0]].node, p[1], segs[q[0]].node, q[1]);
+      return r ? [r] : [];
+    }
+    const out = [];
+    let first = null, last = null;
+    const flush = () => {
+      if (!first) return;
+      const r = makeRange(first.node, first === segs[p[0]] ? p[1] : 0,
+        last.node, last === segs[q[0]] ? q[1] : last.node.length);
+      if (r) out.push(r);
+    };
+    for (let i = p[0]; i <= q[0]; i++) {
+      const s = segs[i];
+      if (!s.node) continue;
+      if (first && s.node.getRootNode() !== first.node.getRootNode()) { flush(); first = null; }
+      first ||= s;
+      last = s;
+    }
+    flush();
+    return out;
+  }
+
+  // One Range for block text a..e. For a block mixing trees, only the first tree's part.
+  const rangeOf = (block, a, e) => rangesOf(block, a, e)[0] || null;
+
+  // The box around block text a..e, across all its Ranges.
+  function rectOf(block, a, e) {
+    let box = null;
+    for (const r of rangesOf(block, a, e)) {
+      const b = r.getBoundingClientRect();
+      if (!b.width && !b.height) continue;
+      box = box ? { top: Math.min(box.top, b.top), bottom: Math.max(box.bottom, b.bottom),
+        left: Math.min(box.left, b.left), right: Math.max(box.right, b.right) } :
+        { top: b.top, bottom: b.bottom, left: b.left, right: b.right };
+    }
+    if (box) { box.width = box.right - box.left; box.height = box.bottom - box.top; }
+    return box;
+  }
+
+  // First text node in the flat tree at or under n.
+  function firstText(n) {
+    if (n.nodeType === 3) return n;
+    for (const k of flatKids(n)) {
+      const t = firstText(k);
+      if (t) return t;
+    }
+    return null;
+  }
+
   // DOM point -> { b, off } in the model, or null if that text isn't part of it.
   function locate(model, node, offset) {
     if (node.nodeType === 1) {
-      const child = node.childNodes[offset] || node;
-      const tw = document.createTreeWalker(child, NodeFilter.SHOW_TEXT);
-      const t = child.nodeType === 3 ? child : tw.nextNode();
+      const t = firstText(node.childNodes[offset] || node);
       if (!t) return null;
       node = t;
       offset = 0;
@@ -197,23 +324,21 @@
     return block.segs.find(s => s.node)?.node;
   }
 
-  // First block that starts at or after `node` in document order, or -1.
+  // First block that starts at or after `node` in flat tree order, or -1.
   function blockAtOrAfter(model, node) {
     if (!node.isConnected) return -1;
     const bs = model.blocks;
     let lo = 0, hi = bs.length;
     while (lo < hi) {
       const mid = (lo + hi) >> 1;
-      const f = firstNode(bs[mid]);
-      const after = f === node || (node.compareDocumentPosition(f) & Node.DOCUMENT_POSITION_FOLLOWING);
-      if (after) hi = mid;
+      if (flatCompare(node, firstNode(bs[mid])) <= 0) hi = mid;
       else lo = mid + 1;
     }
     return lo < bs.length ? lo : -1;
   }
 
   function pinned(el, cache) {
-    for (let e = el; e && e !== document.body; e = e.parentElement) {
+    for (let e = el; e?.nodeType === 1 && e !== document.body; e = flatParent(e)) {
       if (cache.has(e)) return cache.get(e);
       const p = getComputedStyle(e).position;
       if (p === 'fixed' || p === 'sticky') { cache.set(el, true); return true; }
@@ -228,12 +353,12 @@
     const vh = innerHeight, cache = new Map();
     for (const b of model.blocks) {
       if (pinned(b.el, cache)) continue;
-      const rect = rangeOf(b, 0, b.text.length)?.getBoundingClientRect();
-      if (!rect || (!rect.width && !rect.height)) continue;
+      const rect = rectOf(b, 0, b.text.length);
+      if (!rect) continue;
       if (rect.bottom <= 0 || rect.top >= vh) continue;
       const ss = sentences(b);
       for (let s = 0; s < ss.length; s++) {
-        const rr = rangeOf(b, ss[s].start, ss[s].end)?.getBoundingClientRect();
+        const rr = rectOf(b, ss[s].start, ss[s].end);
         if (rr && rr.bottom > 0) return { b: b.i, s, off: ss[s].start };
       }
     }
@@ -241,6 +366,7 @@
     return b0 ? { b: 0, s: 0, off: sentences(b0)[0].start } : null;
   }
 
-  R.model = { build, sentences, words, sentenceAt, wordAt, domPoint, rangeOf, locate,
-    blockAtOrAfter, firstNode, firstVisible };
+  R.model = { build, sentences, words, sentenceAt, wordAt, domPoint, rangeOf, rangesOf, rectOf,
+    locate, blockAtOrAfter, firstNode, firstVisible, flatParent, flatCompare, flatContains,
+    shadowRoots };
 })();

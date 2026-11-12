@@ -34,12 +34,28 @@
       }
     }
   }
+  // The innermost element at a point, inside open shadow roots too, as a real click would hit.
+  function deepElementAt(x, y) {
+    let el = document.elementFromPoint(x, y);
+    while (el?.shadowRoot) {
+      const inner = el.shadowRoot.elementFromPoint(x, y);
+      if (!inner || inner === el) break;
+      el = inner;
+    }
+    return el;
+  }
   const click = (el, word, extra = {}) => {
     const r = wordRect(el, word);
-    const ev = new MouseEvent('click', { bubbles: true, cancelable: true, clientX: r.left + r.width / 2,
-      clientY: r.top + r.height / 2, button: 0, ...extra });
-    document.elementFromPoint(ev.clientX, ev.clientY).dispatchEvent(ev);
+    const ev = new MouseEvent('click', { bubbles: true, cancelable: true, composed: true,
+      clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, button: 0, ...extra });
+    deepElementAt(ev.clientX, ev.clientY).dispatchEvent(ev);
     return ev;
+  };
+  const inShadow = (hostId, sel) => document.getElementById(hostId).shadowRoot.querySelector(sel);
+  const allText = (opts) => M.build(document.body, opts).blocks.map(b => norm(b.text));
+  const textIn = (el, word) => {
+    const tw = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    for (let n; (n = tw.nextNode());) { const i = n.data.indexOf(word); if (i >= 0) return [n, i]; }
   };
   // Selects from the start of `a` in elA to `chars` characters into `b` in elB (whole word if omitted).
   function select(elA, a, elB, b, chars) {
@@ -555,6 +571,156 @@
       if (rd.state !== 'off') throw rd.state;
       if (!/typing box/.test(R.hud.text())) throw R.hud.text();
       if (speaks().length) throw 'spoke';
+    },
+    'shadow: text in an open shadow root is read, with the usual visibility rules'() {
+      const all = allText();
+      if (!all.includes('Words inside an open shadow root.')) throw 'open shadow text missing';
+      if (all.some(t => t.includes('Hidden shadow text'))) throw 'display:none text in a shadow root was read';
+      if (!all.includes('Text in a contents host.')) throw 'text in a display: contents host missing';
+    },
+    'shadow: a nested shadow root is read in place, inside its sentence'() {
+      const all = allText();
+      if (!all.includes('Outer text runs into nested shadow and back out.')) {
+        throw JSON.stringify(all.filter(t => /Outer|nested/.test(t)));
+      }
+    },
+    'shadow: slotted text is read once, where its slot is'() {
+      const want = ['Before the components.', 'Words inside an open shadow root.',
+        'Outer text runs into nested shadow and back out.', 'Card heading.', 'Slotted beta comes first.',
+        'Between the slots.', 'Slotted alpha comes last.', 'Default slot text.', 'Text in a contents host.',
+        'Shadow box line one.'];
+      const all = allText();
+      const i = all.indexOf(want[0]);
+      const got = all.slice(i, i + want.length);
+      if (JSON.stringify(got) !== JSON.stringify(want)) throw JSON.stringify(got);
+      for (const w of want) {
+        const n = all.filter(t => t === w).length;
+        if (n !== 1) throw `"${w}" read ${n} times`;
+      }
+      if (all.some(t => t.includes('Fallback text'))) throw 'unused slot fallback was read';
+    },
+    'shadow: a closed shadow root is skipped'() {
+      if (allText().some(t => t.includes('Closed shadow text'))) throw 'strict model read it';
+      if (allText({ lenient: true }).some(t => t.includes('Closed shadow text'))) throw 'lenient model read it';
+    },
+    'shadow: a block across trees maps to one range per tree'() {
+      const m = M.build(), b = m.blocks.find(x => norm(x.text).startsWith('Outer text runs'));
+      const rs = M.rangesOf(b, 0, b.text.length);
+      if (rs.length !== 3) throw `${rs.length} ranges`;
+      if (norm(rs.map(String).join('')) !== norm(b.text)) throw rs.map(String).join('|');
+      const w = M.words(b, M.sentences(b)[0]).find(x => b.text.slice(x.start, x.end) === 'nested');
+      const wr = M.rangesOf(b, w.start, w.end);
+      if (wr.length !== 1 || String(wr[0]) !== 'nested') throw wr.map(String).join('|');
+      if (wr[0].startContainer.getRootNode() !== inShadow('host2', '#inhost').shadowRoot) throw 'wrong tree';
+    },
+    async 'shadow: click reads a word in a shadow root, and its highlight paints there'() {
+      $('host1').scrollIntoView({ block: 'center' });
+      await fresh();
+      const s1 = inShadow('host1', '#s1');
+      click(s1, 'inside');
+      if (!lastSpeak().startsWith('inside an open shadow root.')) throw lastSpeak();
+      if (wordText() !== 'inside') throw wordText();
+      const r = [...CSS.highlights.get('rip-word')][0];
+      if (r.startContainer.getRootNode() !== $('host1').shadowRoot) throw 'range not in the shadow root';
+      const want = getComputedStyle(document.documentElement, '::highlight(rip-word)').backgroundColor;
+      const got = getComputedStyle(s1, '::highlight(rip-word)').backgroundColor;
+      if (want === 'rgba(0, 0, 0, 0)' || got !== want) throw `shadow text gets ${got}, page has ${want}`;
+      rd.stop();
+    },
+    async 'shadow: a sentence across a nested shadow root highlights every part'() {
+      $('host2').scrollIntoView({ block: 'center' });
+      await fresh();
+      P.fake.msPerWord = 300;
+      const outer = inShadow('host2', '#outer');
+      rd.jumpTo(outer.firstChild, 0);
+      if (lastSpeak() !== 'Outer text runs into nested shadow and back out.') throw lastSpeak();
+      const rs = [...CSS.highlights.get('rip-sentence')];
+      if (rs.length !== 3) throw `${rs.length} sentence ranges`;
+      if (norm(rs.map(String).join('')) !== 'Outer text runs into nested shadow and back out.') throw rs.join('|');
+      await waitFor(() => wordText() === 'nested', 3000);
+      if (wordText() !== 'nested') throw wordText();
+      rd.stop();
+    },
+    async 'shadow: read aloud on a selection inside a shadow root'() {
+      menuReset();
+      $('host1').scrollIntoView({ block: 'center' });
+      select(inShadow('host1', '#s1'), 'inside', inShadow('host1', '#s1'), 'shadow');
+      P._read(false);
+      await waitFor(() => rd.state === 'off' && speaks().length > 0, 5000);
+      getSelection().removeAllRanges();
+      const t = speaks().map(x => x.text);
+      if (t[0] !== 'inside an open shadow') throw JSON.stringify(t);
+      if (R.hud.text() !== 'End of selection') throw R.hud.text();
+    },
+    async 'shadow: read aloud on slotted text'() {
+      menuReset();
+      $('host3').scrollIntoView({ block: 'center' });
+      select($('host3'), 'beta', $('host3'), 'first');
+      P._read(true);
+      await waitFor(() => speaks().length >= 2, 5000);
+      getSelection().removeAllRanges();
+      const t = speaks().map(x => x.text);
+      rd.stop();
+      if (t[0] !== 'beta comes first.' || t[1] !== 'Between the slots.') throw JSON.stringify(t);
+    },
+    async 'shadow: a selection from the page into a shadow root reads both sides'() {
+      const sel = getSelection();
+      if (!sel.getComposedRanges) return; // Chrome before 137 can't report it; nothing to check
+      menuReset();
+      $('host1').scrollIntoView({ block: 'center' });
+      const [a, ai] = textIn($('shIntro'), 'components'), [b, bi] = textIn(inShadow('host1', '#s1'), 'inside');
+      sel.setBaseAndExtent(a, ai, b, bi + 'inside'.length);
+      P._read(false);
+      await waitFor(() => rd.state === 'off' && speaks().length > 0, 5000);
+      sel.removeAllRanges();
+      const t = speaks().map(x => x.text);
+      if (t[0] !== 'components.' || t.at(-1) !== 'Words inside') throw JSON.stringify(t);
+    },
+    async 'shadow: follows the spoken word in a scroll box inside a shadow root'() {
+      const host = $('host6'), box = inShadow('host6', '#sbox');
+      host.scrollIntoView({ block: 'center' });
+      box.scrollTop = 0;
+      await wait(50);
+      await fresh();
+      P.fake.msPerWord = 400;
+      rd.st.autoScrollUntil = 0;
+      rd.jumpTo(inShadow('host6', '#sbLast').firstChild, 0);
+      await waitFor(() => box.scrollTop > 10, 3000);
+      await wait(600);
+      key(' ');
+      if (box.scrollTop <= 10) throw `box did not scroll (${box.scrollTop})`;
+      const r = wordRect(inShadow('host6', '#sbLast'), 'last'), br = box.getBoundingClientRect();
+      if (r.top < br.top || r.bottom > br.bottom) throw 'word not visible in the box';
+      rd.stop();
+    },
+    async 'shadow: fallback sheet colors shadow text, leaves page sheets alone, and goes on stop'() {
+      const root = $('host1').shadowRoot, s1 = inShadow('host1', '#s1');
+      const pageSheet = new CSSStyleSheet();
+      pageSheet.replaceSync('p { letter-spacing: 0px; }');
+      root.adoptedStyleSheets = [pageSheet];
+      const html = root.innerHTML, body = document.body.innerHTML;
+      R.hl.alwaysAdopt = true;
+      try {
+        $('host1').scrollIntoView({ block: 'center' });
+        await fresh();
+        R.hl.colors({ wordColor: '#00ff00' }); // only the added sheet uses this color
+        P.fake.msPerWord = 300;
+        rd.jumpTo(s1.firstChild, 0);
+        if (root.adoptedStyleSheets.length !== 2) throw `${root.adoptedStyleSheets.length} sheets while reading`;
+        if (root.adoptedStyleSheets[0] !== pageSheet) throw 'page sheet moved';
+        const c = getComputedStyle(s1, '::highlight(rip-word)').backgroundColor;
+        if (c !== 'rgb(0, 255, 0)') throw `word color in the shadow root is ${c}`;
+        if (root.innerHTML !== html || document.body.innerHTML !== body) throw 'HTML changed while reading';
+        rd.stop();
+        const left = root.adoptedStyleSheets;
+        if (left.length !== 1 || left[0] !== pageSheet) throw `${left.length} sheets after stop`;
+        if (root.innerHTML !== html || document.body.innerHTML !== body) throw 'HTML changed after stop';
+        if (CSS.highlights.has('rip-word') || CSS.highlights.has('rip-sentence')) throw 'highlight left behind';
+      } finally {
+        R.hl.alwaysAdopt = false;
+        rd.stop();
+        root.adoptedStyleSheets = [];
+      }
     },
     async 'no layout change: body HTML untouched while reading'() {
       rd.stop();

@@ -66,9 +66,11 @@
     }, true);
   }
 
-  function caretAt(x, y) {
+  // shadowRoots: open shadow roots the click went through. Without them, a point on text
+  // inside a shadow tree comes back as a spot next to its host.
+  function caretAt(x, y, shadowRoots) {
     if (document.caretPositionFromPoint) {
-      const p = document.caretPositionFromPoint(x, y);
+      const p = document.caretPositionFromPoint(x, y, { shadowRoots });
       return p && { node: p.offsetNode, offset: p.offset };
     }
     const r = document.caretRangeFromPoint?.(x, y);
@@ -95,11 +97,13 @@
     if (orphaned()) return;
     const sel = getSelection();
     if (sel && !sel.isCollapsed && sel.toString().trim()) return; // they were selecting text
-    const t = e.composedPath()[0];
+    const path = e.composedPath(), t = path[0];
     const el = t?.nodeType === 1 ? t : t?.parentElement;
     if (!el || R.hud.isHud(el)) return;
-    if (el.closest(INTERACTIVE) && !e.altKey) return; // let links and buttons work
-    const cp = caretAt(e.clientX, e.clientY);
+    // Let links and buttons work, including ones that wrap a shadow host or sit inside one.
+    if (!e.altKey && path.some(n => n.nodeType === 1 && n.matches(INTERACTIVE))) return;
+    const roots = path.filter(n => n.nodeType === 11 && n.host);
+    const cp = caretAt(e.clientX, e.clientY, roots);
     if (!cp || !onText(cp, e.clientX, e.clientY)) return;
     if (rd.jumpTo(cp.node, cp.offset) && e.altKey) {
       e.preventDefault(); // Alt+click on a link would otherwise download it

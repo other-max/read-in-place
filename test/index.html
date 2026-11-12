@@ -38,6 +38,15 @@
     <p>Filler sentence four.</p><p>Filler sentence five.</p><p>Filler sentence six.</p>
     <p id="bLast">The last line in the box.</p>
   </div>
+  <div id="shadows">
+    <p id="shIntro">Before the components.</p>
+    <div id="host1"><template shadowrootmode="open"><p id="s1">Words inside an open shadow root.</p><p style="display:none">Hidden shadow text.</p></template></div>
+    <div id="host2"><template shadowrootmode="open"><div id="outer">Outer text runs <span id="inhost"><template shadowrootmode="open">into <b>nested</b> shadow</template></span> and back out.</div></template></div>
+    <div id="host3"><template shadowrootmode="open"><h3>Card heading.</h3><p><slot name="b"></slot></p><p>Between the slots.</p><p><slot name="a"></slot></p><p><slot>Fallback text is not used.</slot></p></template><span slot="a">Slotted alpha comes last.</span><span slot="b">Slotted beta comes first.</span><span>Default slot text.</span></div>
+    <div id="host4"><template shadowrootmode="closed"><p>Closed shadow text stays private.</p></template></div>
+    <div id="host5"><template shadowrootmode="open"><style>:host { display: contents; }</style><p>Text in a contents host.</p></template></div>
+    <div id="host6"><template shadowrootmode="open"><div id="sbox" style="height:60px;overflow:auto;border:1px solid #ccc"><p>Shadow box line one.</p><p>Shadow box line two.</p><p>Shadow box line three.</p><p id="sbLast">Shadow box last line.</p></div></template></div>
+  </div>
   <div class="spacer"></div>
   <p id="end">The final paragraph of the page.</p>
 
