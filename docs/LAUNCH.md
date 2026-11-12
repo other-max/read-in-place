@@ -39,7 +39,16 @@ All dashboard text, assets, permission justifications, and data use answers are 
 - [ ] Copy the 0.2.4 privacy policy change (right-click menu, effective 2026-11-12) to the live
   privacy page in `navica-marketing`
 - [ ] Decide the Website content box (decision 4)
-- [ ] `scripts/package.sh`, upload the zip, fill the listing and Privacy tab, submit for review
+- [x] License: GPL-3.0-or-later, because the built-in voices bundle eSpeak NG (decided
+  2026-11-12). `LICENSE` and `THIRD_PARTY_NOTICES.md` ship in the zip.
+- [ ] Make the GitHub repository public (the notices and privacy policy link to it). Check
+  the history for secrets first.
+- [ ] On each release tag, attach source copies of phonemizer.js 1.2.1 and eSpeak NG to the
+  GitHub release.
+- [ ] Copy the built-in voices and open source sections of the privacy policy to the live
+  privacy page in `navica-marketing`.
+- [ ] Listen to the built-in voices on real hardware (only tested headless so far).
+- [ ] `scripts/fetch-voice.sh` (the model is gitignored), then `scripts/package.sh`, upload the zip, fill the listing and Privacy tab, submit for review
 
 ## Later
 

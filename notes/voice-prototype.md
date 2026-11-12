@@ -44,8 +44,12 @@ and the other three voices at 3x. They are worth comparing by ear to pick `maxMo
 
 ## Open issues before shipping
 
-1. **License.** The `phonemizer` package is Apache 2.0, but it embeds eSpeak NG, which is
-   GPL-3.0. Shipping it likely means releasing the extension under the GPL, or swapping in a
+1. **License (decided 2026-11-12).** The `phonemizer` package is Apache 2.0, but it embeds
+   eSpeak NG, which is GPL-3.0. We chose to ship it: Glint Reader is now GPL-3.0-or-later
+   (`LICENSE`, `THIRD_PARTY_NOTICES.md`). Each release must make the source available,
+   including the phonemizer.js and eSpeak NG source trees. The exact eSpeak NG commit that
+   phonemizer 1.2.1 was built from isn't recorded upstream. To be exact, rebuild eSpeak NG
+   from a pinned commit with Emscripten. The fallback, if GPL ever becomes a problem, is a
    dictionary-based phonemizer (CMUdict plus rules, as Kokoro's own `misaki` does).
 2. **Speed past 3x.** Making speech is the limit. Options: WebGPU (Kokoro runs several times
    faster there, but needs the fp32 or fp16 model at 163 to 325 MB, so it would be downloaded

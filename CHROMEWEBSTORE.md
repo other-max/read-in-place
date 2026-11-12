@@ -1,6 +1,6 @@
 # Chrome Web Store Listing: Glint Reader
 
-> Last Updated: 2026-11-10
+> Last Updated: 2026-11-12
 
 This file is the source for everything typed into the Chrome Developer Dashboard. Keep it in
 step with `src/manifest.json`. Launch decisions and the rename record are in `docs/LAUNCH.md`.
@@ -66,9 +66,17 @@ Render with `store/screenshots/render.sh` (headless Chrome, real content scripts
 | activeTab | permissions | Gives access to the current tab only when the user presses the shortcut, clicks the toolbar icon, or picks a Glint Reader item from the right-click menu there. The extension has no host permissions and can't see any page otherwise. |
 | scripting | permissions | Injects the reader's scripts and highlight styles into the tab the user just started it on, using the access activeTab grants. All scripts ship in the package. |
 | contextMenus | permissions | Adds a Glint Reader submenu with "Read aloud" and "Read aloud from here" to the right-click menu when text is selected. Choosing one starts the reader on that tab, which grants activeTab access the same way the toolbar icon does. |
+| ttsEngine | permissions | Registers Glint Reader's four built-in voices ("Glint built-in") as a Chrome speech engine, so they work on computers with no usable system voices. Speech is made on the device by a voice model that ships in the package. |
+| offscreen | permissions | Opens one hidden extension page that runs the built-in voice model and plays its audio, since a service worker can't play sound. It opens only while a built-in voice is speaking. |
 | (none) | host_permissions | None requested. |
 
-**Remote code:** No. All code ships in the package.
+**Remote code:** No. All code ships in the package, including the voice model and its
+WebAssembly runtime (ONNX Runtime Web). The extension pages' CSP adds `'wasm-unsafe-eval'` only
+so that bundled WebAssembly can run. COOP and COEP are set so the runtime can use threads.
+
+**License:** GPL-3.0-or-later, because the built-in voices include eSpeak NG. Source is at
+https://github.com/other-max/read-in-place. `LICENSE` and `THIRD_PARTY_NOTICES.md` ship at the
+root of the package.
 
 ## Privacy & Data Use
 
@@ -132,7 +140,7 @@ https://navica.llc/tools/glint-reader/ (also the manifest `homepage_url`)
 
 | Version | Date | Changes | Status |
 |---------|------|---------|--------|
-| 0.2.6 | 2026-11-12 | Reads text inside web components (open shadow roots), such as MSN articles and Salesforce-style apps. Highlighting, clicks, the right-click menu, and scrolling work there too. No new permissions. | Draft |
+| 0.2.6 | 2026-11-12 | Reads text inside web components (open shadow roots), such as MSN articles and Salesforce-style apps. Highlighting, clicks, the right-click menu, and scrolling work there too. Adds four built-in voices (Kokoro-82M, English) that run on the device, with exact word highlighting. Adds the ttsEngine and offscreen permissions. Now open source under GPL-3.0. | Draft |
 | 0.2.5 | 2026-11-12 | Reads email bodies in Karbon and other pages that wrap text in display: contents, text shown inside a hidden box, and selections inside frames. | Draft |
 | 0.2.4 | 2026-11-12 | Right-click menu on selected text: Read aloud reads just the selection, and Read aloud from here reads on to the end of the page. Adds the contextMenus permission. | Draft |
 | 0.2.3 | 2026-11-10 | Measures the voice automatically after install and update, and stops measuring if reading starts. Unmeasured Google voices start at a 3.5x top speed. | Draft |
@@ -151,7 +159,9 @@ https://navica.llc/tools/glint-reader/ (also the manifest `homepage_url`)
 - Google's online voices report no word positions, so their highlighting is estimated, and
   they hang above engine rate 2. Their top speed measures about 3.75x.
 - Chrome installed as a Linux Flatpak has only Google's online voices. Its sandbox can't reach
-  the system's speech service.
+  the system's speech service. The built-in voices work there.
+- Built-in voices are English only, and keep up with reading up to about 3x. The package is
+  about 106 MB because it includes the voice model.
 
 ### Rejection History
 None yet.

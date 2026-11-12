@@ -28,7 +28,11 @@ Removing the extension deletes both.
 
 ## Voices
 
-The extension speaks through Chrome's text to speech feature. On-device voices, such as the
+Glint Reader comes with four built-in voices, marked "Glint built-in" in the settings. They
+run entirely on your computer. The voice model is part of the extension, so nothing is
+downloaded and no text leaves your computer when you use them.
+
+The extension can also speak through Chrome's text to speech feature. On-device voices, such as the
 voices built into macOS and Windows, speak entirely on your computer. Some voices are online
 voices, marked "Online" in the settings. When you choose one, Chrome sends the text being spoken
 to that voice's provider, such as Google, to turn it into speech. That provider's privacy policy
@@ -40,7 +44,12 @@ covers that text. Choose an on-device voice if you want nothing to leave your co
   analytics.
 - The extension doesn't read pages you haven't started it on, and it doesn't keep any record of
   the pages you read.
-- It loads no code from outside the extension.
+- It loads no code or voice data from outside the extension.
+
+## Open source
+
+Glint Reader is free software under the GNU General Public License, version 3. Its source code
+is at https://github.com/other-max/read-in-place.
 
 ## Contact
 

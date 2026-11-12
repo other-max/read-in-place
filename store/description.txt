@@ -11,7 +11,8 @@ WHAT IT DOES
 • Honest speeds. Glint Reader measures how fast your voice can really go, silently, so each speed step is the speed you actually hear.
 • Keyboard first. Space pauses. The arrow keys move by sentence or paragraph. = and - change speed. 0 goes back to 1x. Esc stops.
 • Small corner controls. A pill in the corner shows the speed and a pause button. Hover it to change speed, open settings, or stop.
-• Your voices, your colors. Choose any voice installed in Chrome or on your computer, and pick the highlight colors.
+• Built-in voices. Four natural voices come with Glint Reader and run entirely on your computer, with exact word highlighting. They work even where Chrome has no voices of its own.
+• Your voices, your colors. Choose a built-in voice or any voice installed in Chrome or on your computer, and pick the highlight colors.
 
 HOW TO USE IT
 
@@ -21,7 +22,7 @@ Or select some text and right-click. Read aloud reads just that text. Read aloud
 
 PRIVACY
 
-Glint Reader collects nothing. It has no account, no analytics, and no servers. It can only see a page after you start it on that page, and it reads that page's text only to speak it. Your settings stay in Chrome. On-device voices speak entirely on your computer. If you choose an online voice, Chrome sends the text being spoken to that voice's provider, as it does for any extension that uses that voice.
+Glint Reader collects nothing. It has no account, no analytics, and no servers. It can only see a page after you start it on that page, and it reads that page's text only to speak it. Your settings stay in Chrome. The built-in voices and other on-device voices speak entirely on your computer. If you choose an online voice, Chrome sends the text being spoken to that voice's provider, as it does for any extension that uses that voice.
 
 PERMISSIONS
 
@@ -29,11 +30,12 @@ PERMISSIONS
 • Storage: saves your voice, speed, and colors, and each voice's measured top speed.
 • Active tab and scripting: let the extension work on the current tab only when you start it there. It has no access to any site until you do.
 • Context menus: add Read aloud and Read aloud from here to the right-click menu when you select text.
+• Speech engine and offscreen document: run the built-in voices on your computer and play their audio.
 
 WHAT IT CAN'T READ
 
 Chrome's built-in PDF viewer, pages drawn on a canvas such as Google Docs, Chrome's own pages, and the Chrome Web Store.
 
-On Linux, the Flatpak build of Chrome can't reach the system's voices, so it only offers Google's online voices. Those top out near 3.5x, and their word highlighting is estimated. Chrome from google.com/chrome, with speech-dispatcher installed, can use the voices on your computer.
+On Linux, the Flatpak build of Chrome can't reach the system's voices, so it only offers Google's online voices and the built-in voices. Online voices top out near 3.5x, and their word highlighting is estimated. The built-in voices are English only.
 
-Built by Navica LLC.
+Built by Navica LLC. Free and open source under the GNU GPL, version 3.

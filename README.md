@@ -64,10 +64,11 @@ Launch checklist, open decisions, and the rename list: [docs/LAUNCH.md](docs/LAU
 
 ```
 src/          extension source (load this folder unpacked)
-  background/   service worker: speech, toggle, speed measuring
+  background/   service worker: speech, toggle, speed measuring, built-in voice engine
   content/      injected scripts: text model, reader, highlight, corner controls, input
   options/      settings page
   shared/       defaults and helpers used everywhere
+  voice/        built-in Kokoro-82M voices (model fetched by scripts/fetch-voice.sh)
 test/         in-page test suite and fixture page
 notes/        research and design notes
 scripts/      packaging and icon helpers
@@ -75,3 +76,9 @@ store/        store description and screenshot renderer
 site/         landing page draft (plain HTML)
 docs/         launch checklist, privacy policy, store Privacy tab text
 ```
+
+## License
+
+Copyright (C) 2026 Navica LLC. Glint Reader is free software under the GNU General Public
+License, version 3 or later. See `LICENSE`. The built-in voices bundle eSpeak NG (GPL-3.0),
+ONNX Runtime Web (MIT), and Kokoro-82M (Apache 2.0). See `THIRD_PARTY_NOTICES.md`.

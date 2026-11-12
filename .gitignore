@@ -14,3 +14,4 @@
 
 # Built-in voice model (92 MB). Fetch it with scripts/fetch-voice.sh.
 /src/voice/model/kokoro.onnx
+.claude/worktrees/
