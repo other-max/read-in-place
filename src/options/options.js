@@ -44,18 +44,24 @@ async function refreshVoiceInfo() {
   const c = await caps();
   const cap = C.capFor(v, c);
   const m = v && c[v.voiceName];
+  // Entries measured before 0.2.2 have no pace (cps), so they count as unmeasured and get redone.
   const notes = [];
   if (v) {
     notes.push(v.remote ? 'Online voice.' : 'On-device voice.');
     notes.push(C.hasWord(v) ? 'Reports each word, so highlighting is exact.' :
       'Does not report words, so word highlighting is estimated.');
   }
+  if (!voices.length) {
+    notes.push('Chrome found no voices on this computer, so nothing can be read aloud.',
+      'On Linux, Chrome installed as a Flatpak cannot reach the system voices.',
+      'Install Chrome from google.com/chrome, and make sure speech-dispatcher is installed.');
+  }
   $('voice-note').textContent = notes.join(' ');
-  $('speed-note').textContent = m ?
-    `Top speed: ${C.fmt(cap)}x (measured; speech is about ${C.fmt(m.best)}x faster than 1x there).` :
+  $('speed-note').textContent = m?.best ?
+    `Top speed: ${C.fmt(cap)}x (measured).` :
     `Top speed: ${C.fmt(cap)}x (a guess until measured).`;
   fillRates(cap);
-  return { v, cap, measured: !!m };
+  return { v, cap, measured: !!m?.cps };
 }
 
 function fillRates(cap) {
@@ -69,17 +75,17 @@ function fillRates(cap) {
 async function measure() {
   const btn = $('measure');
   btn.disabled = true;
-  $('speed-note').textContent = 'Measuring silently. This takes about 20 seconds.';
+  $('speed-note').textContent = 'Measuring silently. This takes up to a minute.';
   const res = await chrome.runtime.sendMessage({ type: 'calibrate', voiceName: settings.voiceName });
   btn.disabled = false;
   if (res?.error) $('speed-note').textContent = res.error;
   else await refreshVoiceInfo();
 }
 
-function test() {
+async function test() {
   const v = currentVoice();
-  chrome.tts.speak('This is how Read in Place will sound at your chosen speed.', {
-    voiceName: v?.voiceName, rate: Number($('rate').value) || 1, enqueue: false,
+  chrome.tts.speak('This is how Glint Reader will sound at your chosen speed.', {
+    voiceName: v?.voiceName, rate: C.engineRate(v, await caps(), Number($('rate').value) || 1), enqueue: false,
   });
 }
 

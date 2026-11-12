@@ -45,6 +45,7 @@
     rd.stop();
     R.testLog.length = 0;
     P.fake.noWords = false; P.fake.msPerWord = 40; P.fake.cap = 4;
+    P.fake.noVoices = false; P.fake.failSpeak = null;
     P._store.rate = 1;
     if (at) document.getElementById(at).scrollIntoView({ block: 'center' });
     await rd.start();
@@ -338,6 +339,58 @@
       if (target?.localName !== 'rip-hud') throw `hit ${target?.localName}`;
       target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, composed: true, clientX: x, clientY: y }));
       if (speaks().length !== n) throw 'jumped';
+    },
+    'speed: engine rate inverts a measured curve'() {
+      const C = RIP_COMMON, near = (a, b) => Math.abs(a - b) < 0.02;
+      // Measured from Google US English in Chrome 157 on Linux, 2026-11-10.
+      const g = { voiceName: 'Google US English', remote: true };
+      const caps = { [g.voiceName]: { best: 3.74, table: [
+        { rate: 1, speedup: 1 }, { rate: 1.25, speedup: 1.4 }, { rate: 2, speedup: 3.74 }] } };
+      if (!near(C.engineRate(g, caps, 1), 1)) throw 'at 1x';
+      if (!near(C.engineRate(g, caps, 1.4), 1.25)) throw 'at a point';
+      const mid = C.engineRate(g, caps, 2);
+      if (!(mid > 1.25 && mid < 2)) throw 'between points: ' + mid;
+      if (!near(C.engineRate(g, caps, 9), 2)) throw 'past the top';
+      if (C.capFor(g, caps) !== 3.5) throw 'cap ' + C.capFor(g, caps);
+    },
+    'speed: unmeasured Google voices assume rate squared, others linear'() {
+      const C = RIP_COMMON, near = (a, b) => Math.abs(a - b) < 0.01;
+      if (!near(C.engineRate({ voiceName: 'Google UK English Male', remote: true }, {}, 4), 2)) throw 'google';
+      if (!near(C.engineRate({ voiceName: 'Samantha', remote: false }, {}, 3), 3)) throw 'local';
+      if (!near(C.engineRate(null, {}, 1.5), 1.5)) throw 'none';
+    },
+    async 'voices: none at all says so and does not start'() {
+      rd.stop();
+      R.testLog.length = 0;
+      P.fake.noVoices = true;
+      try {
+        await rd.start();
+        if (rd.state !== 'off') throw rd.state;
+        if (speaks().length) throw 'spoke';
+        if (!R.hud.text().includes('no voices')) throw R.hud.text();
+      } finally { P.fake.noVoices = false; }
+    },
+    async 'voices: an error with no message suggests another voice'() {
+      scrollTo(0, 0);
+      rd.stop();
+      R.testLog.length = 0;
+      P.fake.failSpeak = '';
+      try {
+        await rd.start();
+        await waitFor(() => rd.state === 'paused');
+        if (rd.state !== 'paused') throw rd.state;
+        if (!R.hud.text().includes('Try another voice')) throw R.hud.text();
+      } finally { P.fake.failSpeak = null; rd.stop(); }
+    },
+    async 'voices: an error with a message shows it'() {
+      scrollTo(0, 0);
+      rd.stop();
+      P.fake.failSpeak = 'synthesis-failed';
+      try {
+        await rd.start();
+        await waitFor(() => rd.state === 'paused');
+        if (R.hud.text() !== 'Speech error: synthesis-failed') throw R.hud.text();
+      } finally { P.fake.failSpeak = null; rd.stop(); }
     },
     async 'no layout change: body HTML untouched while reading'() {
       rd.stop();

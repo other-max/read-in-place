@@ -30,7 +30,7 @@ async function toggle(tab) {
     await chrome.scripting.executeScript({ target, files: C.CONTENT_FILES });
     await send(tab.id, { type: 'toggle' });
   } catch (e) {
-    console.warn('Read in Place: could not start on this page', e);
+    console.warn('Glint Reader: could not start on this page', e);
     flash(tab.id);
   }
 }
@@ -85,15 +85,19 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
   }
 });
 
-function speak(tabId, msg) {
+async function speak(tabId, msg) {
   if (tabId == null) return;
+  if (calibrating) yieldToReader = true; // reading wins; measuring stops at its next step
   if (active && active.tabId !== tabId) send(active.tabId, { type: 'preempted' });
   active = { tabId, id: msg.id };
   const relay = ev => chrome.tabs.sendMessage(tabId, {
     type: 'tts', id: msg.id,
     ev: { type: ev.type, charIndex: ev.charIndex, errorMessage: ev.errorMessage },
   }, { frameId: 0 }).catch(() => {});
-  const opts = { rate: Math.min(10, Math.max(0.1, msg.rate || 1)), enqueue: false, onEvent: relay };
+  const [voices, { caps = {} }] = await Promise.all([chrome.tts.getVoices(), chrome.storage.local.get('caps')]);
+  if (active?.id !== msg.id) return; // a newer sentence started while we looked up the voice
+  const v = voices.find(x => x.voiceName === msg.voiceName);
+  const opts = { rate: C.engineRate(v, caps, msg.rate || 1), enqueue: false, onEvent: relay };
   if (msg.voiceName) opts.voiceName = msg.voiceName;
   try {
     const p = chrome.tts.speak(msg.text, opts);
@@ -116,24 +120,27 @@ async function voiceInfo(name, lang) {
     C.pickVoice(voices, lang || navigator.language);
   const { caps = {} } = await chrome.storage.local.get('caps');
   return {
+    none: !voices.length, // e.g. Chrome as a Linux Flatpak, which can't reach the system's voices
     voiceName: v?.voiceName || '',
     hasWord: v ? C.hasWord(v) : false,
     remote: !!v?.remote,
     cap: C.capFor(v, caps),
-    measured: !!(v && caps[v.voiceName]),
+    cps: caps[v?.voiceName]?.cps || 0, // characters per second at 1x, for estimated word timing
+    measured: !!(v && caps[v.voiceName]?.best),
   };
 }
 
-// Measure how fast a voice really gets. Speaks silently at rising rates and times each
-// run; the top speed is the last rate that still made speech noticeably faster.
+// Measure how fast a voice really gets. Speaks silently at rising rates and times each run.
+// The table of rate sent against speedup heard lets engineRate() hit the speed the user picked,
+// and the top speed is the fastest speedup heard before speech stopped getting faster.
 const CAL_TEXT = 'The quick brown fox jumps over the lazy dog, and then it runs across the ' +
   'wide green field to find a quiet place to rest.';
 
-function timeIt(rate, voiceName) {
+function timeIt(rate, voiceName, limit = 30000) {
   return new Promise(resolve => {
     let t0 = 0;
     const done = v => { clearTimeout(timer); resolve(v); };
-    const timer = setTimeout(() => done(null), 30000);
+    const timer = setTimeout(() => { chrome.tts.stop(); done(null); }, limit);
     const opts = { rate, volume: 0, enqueue: false, onEvent: ev => {
       if (ev.type === 'start') t0 = performance.now();
       else if (ev.type === 'end') done(t0 ? performance.now() - t0 : null);
@@ -144,33 +151,55 @@ function timeIt(rate, voiceName) {
   });
 }
 
-let calibrating = null;
+let calibrating = null, yieldToReader = false;
 function calibrate(name) {
+  if (!calibrating) yieldToReader = false;
   calibrating ||= runCalibration(name).finally(() => { calibrating = null; });
   return calibrating;
 }
 
+// Times one rate, with a second try, since online voices drop the odd request at random.
+async function timeTwice(rate, voiceName, limit) {
+  for (let tries = 0; tries < 2; tries++) {
+    await new Promise(r => setTimeout(r, 400 * (tries + 1)));
+    if (yieldToReader) return null;
+    const d = await timeIt(rate, voiceName, limit);
+    if (d) return d;
+  }
+  return null;
+}
+const STOPPED = { error: 'Measuring stopped because reading started. Try again when it is done.' };
+
 async function runCalibration(name) {
   const { voiceName } = await voiceInfo(name);
-  const base = await timeIt(1, voiceName);
+  const base = await timeTwice(1, voiceName);
+  if (yieldToReader) return STOPPED;
   if (!base) return { error: 'Could not time this voice. Try again.' };
   const table = [{ rate: 1, speedup: 1 }];
-  let cap = 1, best = 1, misses = 0;
-  for (const rate of [1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]) {
-    const d = await timeIt(rate, voiceName);
-    if (!d) return { error: 'Measuring was interrupted. Try again.' };
+  let best = 1, misses = 0;
+  // Fine steps low down, since some engines speed up much faster than the rate they're given.
+  for (const rate of [1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5, 6, 8, 10]) {
+    // A voice that hangs at a high rate has passed its top speed, so stop there.
+    const d = await timeTwice(rate, voiceName, Math.max(4000, (2 * base) / rate + 3000));
+    if (yieldToReader) return STOPPED;
+    if (!d) break;
     const speedup = base / d;
     table.push({ rate, speedup: Math.round(speedup * 100) / 100 });
-    if (speedup > best * 1.08) { cap = rate; best = speedup; misses = 0; }
+    if (speedup > best * 1.08) { best = speedup; misses = 0; }
     else if (++misses >= 2) break;
   }
   const { caps = {} } = await chrome.storage.local.get('caps');
-  caps[voiceName] = { cap, best: Math.round(best * 100) / 100, table, at: Date.now() };
+  caps[voiceName] = { best: Math.round(best * 100) / 100, cps: Math.round((CAL_TEXT.length / base) * 10000) / 10,
+    table, at: Date.now() };
   await chrome.storage.local.set({ caps });
-  return { voiceName, cap, best: caps[voiceName].best, table };
+  return { voiceName, cap: C.capFor({ voiceName }, caps), best: caps[voiceName].best, table };
 }
 
-// Measure the default voice once, silently, right after install.
-chrome.runtime.onInstalled.addListener(d => {
-  if (d.reason === 'install') calibrate('');
+// Measure the user's voice silently after install or update, unless it's already measured.
+// Entries from before 0.2.2 have no pace (cps), so an update redoes them.
+chrome.runtime.onInstalled.addListener(async d => {
+  if (d.reason !== 'install' && d.reason !== 'update') return;
+  const { voiceName } = await chrome.storage.sync.get(C.DEFAULTS);
+  const info = await voiceInfo(voiceName);
+  if (!info.none && !info.cps) calibrate(voiceName);
 });

@@ -1,10 +1,10 @@
-# Read in Place: design and status
+# Glint Reader: design and status
 
 Goal: read any normal web page aloud in place, with the spoken word highlighted on the real
 page, click-to-start, keyboard navigation, and adjustable speed. No reading mode, no popup
 window, no layout changes.
 
-Status: v0.1.2 built and tested by hand in Chrome. All 35 tests on the in-page suite pass.
+Status: v0.2.3 (renamed from Read in Place in 0.2.0). v0.1.2 was built and tested by hand in Chrome. All 35 tests on the in-page suite pass.
 
 ## Architecture (as built)
 
@@ -38,6 +38,16 @@ options page (options/options.html)
   install and when a voice is chosen, the worker speaks a test sentence silently at rising
   rates and records the last rate that still got noticeably faster. Speed steps stop there.
   Until measured, the guess is 4x for on-device voices and 2x for online voices.
+- **Speeds are the speed you hear, not the rate sent to the engine.** Engines don't all scale
+  linearly: Google's online voices (measured 2026-11-10, Chrome 157 Linux) speed up by about
+  rate squared, so rate 2 sounded like 3.7x. Measuring stores a table of rate sent against
+  speedup heard, plus the voice's pace at 1x, and `engineRate()` in `shared/common.js` inverts
+  it. Unmeasured Google voices assume rate squared, which comes out 10 to 15% slow; others
+  assume linear. Measuring retries a dropped request once and stops where a voice hangs.
+  The service worker measures the user's voice after install and every update (an unpacked
+  reload counts as an update), and reading interrupts a measurement in progress. Via chrome.tts,
+  Google US English measured 3.74x top speed and 17.3 characters a second at 1x, and it hangs
+  at engine rate 2.5 and up, so that is its ceiling.
 - **Voices without word events get estimated word timing.** It switches off as soon as a
   real word event arrives.
 - **Keys are captured only while reading** and never while focus is in a field.
@@ -82,6 +92,9 @@ hand after loading `src/` unpacked.
 - Chrome's PDF viewer and canvas-drawn apps such as Google Docs can't be read.
 - Text inside iframes and shadow DOM is skipped (top frame, light DOM only).
 - Online voices often top out near 2x.
+- Chrome installed as a Linux Flatpak has no voices: its sandbox has neither libspeechd nor
+  the speech-dispatcher socket. The extension says so on start, and the settings page explains
+  it. Test on Linux with Google's .deb Chrome instead.
 - Restricted pages (chrome://, the Web Store) show a red ! on the toolbar icon.
 
 ## Ideas for later

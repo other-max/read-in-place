@@ -8,3 +8,6 @@
 .vscode/
 .idea/
 .claude/settings.local.json
+
+# Rendered store images
+/store/screenshots/.work/

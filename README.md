@@ -1,11 +1,13 @@
-# Read in Place
+# Glint Reader
+
+Formerly Read in Place. The store title is "Glint Reader: reads any web page aloud, word by word".
 
 Chrome extension that reads a web page aloud in place: no reading mode, no popup window, no
 reflow. Click where you want it to start, jump around with keys, and watch each word
 highlight on the real page as it's spoken. Speed goes from 0.5x up to the fastest your
 voice can really go, which is usually well past 2x for on-device voices.
 
-Status: v0.1.2. Design notes and decisions are in `notes/PLAN.md`.
+Status: v0.2.3. Design notes and decisions are in `notes/PLAN.md`.
 
 ## Install
 
@@ -40,8 +42,21 @@ Open `http://127.0.0.1:8765/test/index.html?auto` and check the console, or run
 
 ## Package
 
-`scripts/package.sh` zips `src/` into `dist/` (git-ignored).
+`scripts/package.sh` zips `src/` into `dist/glint-reader-<version>.zip` (git-ignored).
 `scripts/make-icons.py src/icons` redraws the toolbar icons.
+
+## Store listing and website
+
+Launch checklist, open decisions, and the rename list: [docs/LAUNCH.md](docs/LAUNCH.md).
+
+- `store/description.txt`: the store description.
+- `store/screenshots/render.sh`: renders the 1280x800 screenshots, promo tiles, and landing page
+  images to `store/screenshots/out/` with headless Chrome, using the real content scripts.
+- `CHROMEWEBSTORE.md`: everything typed into the store dashboard.
+- `docs/privacy-policy.md`: the privacy policy.
+- Live pages, from the `navica-marketing` repo: https://navica.llc/tools/glint-reader/ and
+  https://navica.llc/tools/glint-reader/privacy/.
+- `site/`: the original landing page draft. The live page is the source of truth now.
 
 ## Layout
 
@@ -54,4 +69,7 @@ src/          extension source (load this folder unpacked)
 test/         in-page test suite and fixture page
 notes/        research and design notes
 scripts/      packaging and icon helpers
+store/        store description and screenshot renderer
+site/         landing page draft (plain HTML)
+docs/         launch checklist, privacy policy, store Privacy tab text
 ```

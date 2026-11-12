@@ -1,6 +1,6 @@
-# Read in Place
+# Glint Reader
 
-Chrome MV3 extension that reads pages aloud in place with live word highlighting.
+Chrome MV3 extension (formerly Read in Place) that reads pages aloud in place with live word highlighting.
 Design and decisions: `notes/PLAN.md`. Research: `notes/research.md`.
 
 - No dependencies, no bundler, plain JS. Load `src/` unpacked.
@@ -14,3 +14,9 @@ Design and decisions: `notes/PLAN.md`. Research: `notes/research.md`.
 - Run the test page (README) after any content-script change. All tests must pass.
 - Bump `version` in `src/manifest.json` and the README status for every hand-off; tag
   releases `v<version>`.
+- Store listing: `CHROMEWEBSTORE.md` holds all dashboard text. Update it (version history, permissions,
+  data use) with every user-facing change. Launch record: `docs/LAUNCH.md`. Any change to
+  permissions, storage, or what text leaves the device also needs `docs/privacy-policy.md`.
+- After any UI or copy change, rerun `store/screenshots/render.sh`. It also refreshes
+  `site/img/`.
+- Writing style for user-facing copy: no em dashes, Oxford comma, short plain sentences.

@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Glint Reader: reads any web page aloud, word by word</title>
+<meta name="description" content="A free Chrome extension that reads web pages aloud in place, highlighting each word on the real page as it is spoken. No account, nothing collected. From Navica LLC.">
+<meta property="og:title" content="Glint Reader">
+<meta property="og:description" content="Hear any page read aloud, right where it is.">
+<meta property="og:image" content="img/site-hero.png">
+<link rel="icon" href="img/icon128.png">
+<!-- Original draft. The live page is in navica-marketing at navica.llc/tools/glint-reader/. Tokens match navica-marketing's global.css; on the
+     live site, drop this <style> block's :root rules and use the site's own. No outside
+     scripts, fonts, or analytics, to fit the site's content security policy. -->
+<style>
+  :root { color-scheme: light dark;
+    --bg:#fbfbf9; --surface:#eef0ed; --ink:#141b26; --muted:#4a5462; --line:#d6dad5;
+    --accent:#1d4f73; --accent-ink:#fff; --hl:#ffd84d; --hl-soft:#fff1a8;
+    --band1:#141b26; --band2:#1d4f73; --shadow:0 18px 48px rgba(20,27,38,.16);
+    --font-display:"Fraunces", Georgia, "Times New Roman", serif;
+    --font-body:"Geist", system-ui, -apple-system, "Segoe UI", sans-serif; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#10151c; --surface:#171f29; --ink:#e9edf1; --muted:#aab4c0; --line:#2b3542;
+      --accent:#8fd3b6; --accent-ink:#10151c; --band1:#0b0f14; --band2:#16324a; --shadow:0 18px 48px rgba(0,0,0,.45); }
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:17px/1.6 var(--font-body); }
+  a { color:var(--accent); }
+  img { max-width:100%; height:auto; display:block; }
+  .wrap { max-width:1120px; margin:0 auto; padding:0 16px; }
+  h1, h2, h3 { font-family:var(--font-display); font-weight:600; line-height:1.15; margin:0; text-wrap:balance; }
+  p { text-wrap:pretty; }
+  mark { background:var(--hl); color:#141b26; border-radius:4px; padding:0 .15em; }
+
+  .band { color:#fff; background:radial-gradient(circle at 12% 8%, rgba(255,255,255,.10), transparent 42%), linear-gradient(135deg, var(--band1), var(--band2)); }
+  header .wrap { display:flex; align-items:center; justify-content:space-between; gap:16px; padding-top:18px; padding-bottom:18px; }
+  .crumbs { font-size:15px; color:rgba(255,255,255,.75); }
+  .crumbs a { color:#fff; text-decoration:none; font-weight:600; }
+  nav { display:flex; gap:22px; font-size:15px; }
+  nav a { color:rgba(255,255,255,.85); text-decoration:none; }
+  nav a:hover { color:#fff; }
+  .hero { display:grid; grid-template-columns:1fr 1.25fr; gap:48px; align-items:center; padding:40px 16px 0; }
+  .hero h1 { font-size:clamp(36px, 5vw, 56px); letter-spacing:-.015em; margin-bottom:18px; }
+  .hero p { font-size:20px; color:rgba(255,255,255,.85); margin:0 0 28px; max-width:32em; }
+  .hero figure { margin:0; align-self:end; }
+  .hero figure img { border-radius:12px 12px 0 0; box-shadow:0 24px 60px rgba(0,0,0,.35); }
+  .cta { display:flex; flex-wrap:wrap; gap:12px; }
+  .btn { display:inline-flex; align-items:center; gap:10px; font-weight:600; font-size:16px; text-decoration:none;
+    padding:12px 20px; border-radius:10px; border:1px solid transparent; }
+  .btn-primary { background:#fff; color:#141b26; }
+  .btn-primary:hover { background:#eef3f7; }
+  .btn-ghost { color:#fff; border-color:rgba(255,255,255,.45); }
+  .btn-ghost:hover { background:rgba(255,255,255,.1); }
+  .fine { font-size:14px; color:rgba(255,255,255,.7); margin:14px 0 0 !important; }
+
+  section { padding:80px 0; }
+  section.alt { background:var(--surface); }
+  .kicker { font-size:14px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--accent); margin:0 0 10px; }
+  h2 { font-size:clamp(28px, 3.6vw, 40px); letter-spacing:-.01em; }
+  .lead { font-size:20px; color:var(--muted); max-width:44em; margin:14px 0 0; }
+
+  .steps { display:grid; grid-template-columns:repeat(3, 1fr); gap:24px; margin-top:40px; counter-reset:step; }
+  .step { background:var(--bg); border:1px solid var(--line); border-radius:14px; padding:24px; }
+  .step::before { counter-increment:step; content:counter(step); display:inline-grid; place-items:center; width:32px; height:32px;
+    border-radius:50%; background:var(--accent); color:var(--accent-ink); font-weight:700; margin-bottom:12px; }
+  .step h3 { font-size:20px; margin-bottom:6px; }
+  .step p { margin:0; color:var(--muted); }
+
+  .row { display:grid; grid-template-columns:1fr 1.2fr; gap:56px; align-items:center; margin-top:72px; }
+  .row.flip .shot { order:-1; }
+  .shot img { border-radius:12px; box-shadow:var(--shadow); border:1px solid var(--line); }
+  .row h3 { font-size:28px; margin-bottom:12px; }
+  .row p { color:var(--muted); margin:0 0 12px; }
+
+  .keys { width:100%; max-width:640px; border-collapse:collapse; margin-top:32px; }
+  .keys td { padding:12px 0; border-bottom:1px solid var(--line); vertical-align:middle; }
+  .keys td:first-child { width:42%; white-space:nowrap; }
+  kbd { font:600 13px/1 ui-monospace, SFMono-Regular, Menlo, monospace; background:var(--bg); color:var(--ink);
+    border:1px solid var(--line); border-bottom-width:2px; border-radius:6px; padding:4px 7px; }
+
+  .trust { display:grid; grid-template-columns:repeat(3, 1fr); gap:28px; margin-top:40px; }
+  .trust div { border-top:3px solid var(--accent); padding-top:16px; }
+  .trust h3 { font-size:20px; margin-bottom:8px; }
+  .trust p { margin:0; color:var(--muted); }
+
+  details { border-bottom:1px solid var(--line); padding:18px 0; max-width:780px; }
+  details:first-of-type { margin-top:28px; border-top:1px solid var(--line); }
+  summary { cursor:pointer; font-weight:600; font-size:18px; }
+  details p { color:var(--muted); margin:10px 0 0; }
+
+  footer { border-top:1px solid var(--line); padding:32px 0 48px; color:var(--muted); font-size:15px; }
+  footer .wrap { display:flex; flex-wrap:wrap; justify-content:space-between; gap:12px; }
+
+  @media (max-width: 860px) {
+    .hero, .row { grid-template-columns:1fr; gap:32px; }
+    .row.flip .shot { order:0; }
+    .steps, .trust { grid-template-columns:1fr; }
+    nav { display:none; }
+    section { padding:56px 0; }
+  }
+</style>
+</head>
+<body>
+<div class="band">
+  <header><div class="wrap">
+    <div class="crumbs"><a href="/">Navica</a> / Tools / Glint Reader</div>
+    <nav aria-label="On this page"><a href="#how">How it works</a><a href="#keys">Keys</a><a href="#privacy">Privacy</a><a href="#faq">FAQ</a></nav>
+  </div></header>
+  <div class="wrap hero">
+    <div>
+      <h1>Hear any page read aloud, <mark>right where it is.</mark></h1>
+      <p>Glint Reader is a free Chrome extension that reads any web page aloud. It reads the page you already have open and highlights each word on the real page as it is spoken. No reading mode, no pop-up player, and nothing on the page moves.</p>
+      <div class="cta">
+        <!-- Replace # with the Chrome Web Store listing URL once it is approved. -->
+        <a class="btn btn-primary" href="#">Add to Chrome, it's free</a>
+        <a class="btn btn-ghost" href="#how">See how it works</a>
+      </div>
+      <p class="fine">Works in Chrome on Mac, Windows, Linux, and ChromeOS. No account. Nothing collected.</p>
+    </div>
+    <figure><img src="img/site-hero.png" width="1544" height="1180" alt="A news article in Chrome with one sentence highlighted in pale yellow and the word being spoken in bright yellow. A small pill in the corner shows 1.5x."></figure>
+  </div>
+</div>
+
+<main>
+  <section id="how">
+    <div class="wrap">
+      <p class="kicker">How it works</p>
+      <h2>Three seconds to start listening</h2>
+      <div class="steps">
+        <div class="step"><h3>Open any page</h3><p>An article, a report, documentation, or a long email in your browser.</p></div>
+        <div class="step"><h3>Press Alt+Shift+R</h3><p>Or click the toolbar icon. On a Mac it's Option+Shift+R. Reading starts at the top of what you can see.</p></div>
+        <div class="step"><h3>Follow along</h3><p>Each word lights up as it's spoken. Click any word to jump there. Press the shortcut again to stop.</p></div>
+      </div>
+
+      <div class="row">
+        <div>
+          <h3>Click any word to start there</h3>
+          <p>Reading picks up from the word you click, so you can skip the intro or go back to the part you missed. Links still work as links, and Alt+click reads a link instead of opening it.</p>
+          <p>Select some text before you start, and reading begins there.</p>
+        </div>
+        <div class="shot"><img src="img/site-click.png" width="1544" height="1400" loading="lazy" alt="A pointer clicking the word glance in the middle of a paragraph, which is now highlighted as the current word."></div>
+      </div>
+
+      <div class="row flip">
+        <div>
+          <h3>Go well past 2x when you're ready</h3>
+          <p>Speed runs from half speed up to the fastest your voice can really go. Voices built into your computer often reach 4x or more. Online voices can sound rough near their top speed.</p>
+          <p>The pill in the corner shows your speed. Hover it to change speed, open settings, or stop, with each key shown above its button.</p>
+        </div>
+        <div class="shot"><img src="img/site-speed.png" width="1544" height="1400" loading="lazy" alt="The corner controls opened on hover, showing stop, settings, slower, faster, 3x, and pause, with key hints above each."></div>
+      </div>
+
+      <div class="row">
+        <div>
+          <h3>Pick a voice and find its top speed</h3>
+          <p>Choose any voice in Chrome or on your computer. Voices that report each word give exact highlighting, and the settings page groups them for you.</p>
+          <p>One click measures how fast your voice can really go, silently, so the speed steps never promise more than the voice can do. You can choose your own highlight colors too.</p>
+        </div>
+        <div class="shot"><img src="img/site-settings.png" width="1544" height="1400" loading="lazy" alt="The settings page, with a voice menu set to Samantha (Enhanced), a measured top speed of 4.5x, and a reading speed of 2.5x."></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="alt" id="keys">
+    <div class="wrap">
+      <p class="kicker">Keyboard</p>
+      <h2>Steer without the mouse</h2>
+      <p class="lead">Keys work only while it's reading, and never while you're typing in a field.</p>
+      <table class="keys">
+        <tbody>
+          <tr><td><kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>R</kbd></td><td>Start or stop on this tab</td></tr>
+          <tr><td><kbd>Space</kbd></td><td>Pause or resume</td></tr>
+          <tr><td><kbd>→</kbd> <kbd>←</kbd></td><td>Next or previous sentence</td></tr>
+          <tr><td><kbd>↓</kbd> <kbd>↑</kbd></td><td>Next or previous paragraph</td></tr>
+          <tr><td><kbd>=</kbd> <kbd>-</kbd></td><td>Faster or slower</td></tr>
+          <tr><td><kbd>0</kbd></td><td>Back to 1x</td></tr>
+          <tr><td><kbd>Esc</kbd></td><td>Stop</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="privacy">
+    <div class="wrap">
+      <p class="kicker">Privacy</p>
+      <h2>It reads the page. That's all it does.</h2>
+      <div class="trust">
+        <div><h3>Nothing collected</h3><p>No account, no analytics, and no servers. Your settings stay in Chrome.</p></div>
+        <div><h3>Only where you start it</h3><p>The extension can't see a page until you start it on that tab, and it keeps no record of what you read.</p></div>
+        <div><h3>On-device voices</h3><p>Voices built into your computer speak without anything leaving it. Online voices send the spoken text to their provider through Chrome.</p></div>
+      </div>
+      <p class="lead"><a href="privacy">Read the privacy policy</a></p>
+    </div>
+  </section>
+
+  <section class="alt" id="faq">
+    <div class="wrap">
+      <p class="kicker">Questions</p>
+      <h2>Good to know</h2>
+      <details><summary>Does it change the page?</summary><p>No. Highlighting paints over the text with Chrome's highlight feature, so the page's layout and content stay exactly as they were. The only thing added is the small pill in the corner.</p></details>
+      <details><summary>Which voice should I use?</summary><p>Pick a voice listed under "On this device, with word highlighting" in the settings. These give exact word tracking and the highest speeds. On a Mac, the Enhanced and Premium voices you can download in System Settings sound best.</p></details>
+      <details><summary>Why does it stop at a certain speed?</summary><p>Each voice has a real top speed, past which it doesn't get any faster. Glint Reader measures it and stops the speed steps there, so the number you see is the speed you hear.</p></details>
+      <details><summary>What can't it read?</summary><p>Chrome's built-in PDF viewer, pages drawn on a canvas such as Google Docs, text inside embedded frames, Chrome's own pages, and the Chrome Web Store. If it can't start, the toolbar icon shows a red !.</p></details>
+      <details><summary>Can I change the shortcut?</summary><p>Yes. Open the settings page and choose "Change the start shortcut", or go to chrome://extensions/shortcuts.</p></details>
+      <details><summary>Does it cost anything?</summary><p>No. It's free, with no account and no upgrade.</p></details>
+    </div>
+  </section>
+
+  <section id="support">
+    <div class="wrap">
+      <p class="kicker">Support</p>
+      <h2>Something not working?</h2>
+      <p class="lead">Email <a href="mailto:max@navica.llc">max@navica.llc</a> with the page you were on and what happened. We read every message.</p>
+    </div>
+  </section>
+</main>
+
+<footer><div class="wrap">
+  <span>Glint Reader is made by <a href="/">Navica LLC</a>.</span>
+  <span><a href="privacy">Privacy policy</a></span>
+</div></footer>
+</body>
+</html>

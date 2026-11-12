@@ -21,6 +21,9 @@
     est: null,
   };
 
+  const NO_VOICES = 'Chrome has no voices on this computer. Open settings for help.';
+  const SPEAK_FAILED = "This voice couldn't speak. Try another voice in settings.";
+
   const block = () => st.model.blocks[st.pos.b];
   const sent = () => M.sentences(block())[st.pos.s];
   const steps = () => C.stepsFor(st.voice.cap || 4);
@@ -120,7 +123,8 @@
   // For voices without word events: walk the words at an estimated pace.
   function estimate(u, t0) {
     if (st.utt !== u || u.gotWord) return;
-    const cps = 14.5 * Math.min(st.rate, st.voice.cap || st.rate); // ~175 wpm at 1x
+    // The rate is the speed heard, so scale the voice's measured pace (or ~175 wpm) by it.
+    const cps = (st.voice.cps || 14.5) * Math.min(st.rate, st.voice.cap || st.rate);
     const ws = M.words(block(), sent()).filter(w => w.end > u.start);
     const tick = () => {
       if (st.utt !== u || u.gotWord || st.state !== 'playing') return;
@@ -156,7 +160,8 @@
         break;
       case 'error':
         pause();
-        hud.message(`Speech error: ${ev.errorMessage || 'unknown'}`, 5000);
+        // Engines often fail without saying why, so point to the usual fix instead.
+        hud.message(ev.errorMessage ? `Speech error: ${ev.errorMessage}` : SPEAK_FAILED, 6000);
         break;
     }
   }
@@ -255,6 +260,12 @@
     st.state = 'playing';
     await loadSettings();
     if (st.state !== 'playing') return;
+    if (st.voice.none) {
+      stop();
+      hud.message(NO_VOICES, 6000);
+      setTimeout(hideIfOff, 6100);
+      return;
+    }
     rebuild();
     const pos = at || fromSelection() || M.firstVisible(st.model);
     if (!pos) { stop(); hud.message('Nothing to read here', 1800); setTimeout(hideIfOff, 1900); return; }

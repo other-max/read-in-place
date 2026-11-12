@@ -10,7 +10,7 @@
   const emit = (id, ev) => L.tts.forEach(f => f(id, ev));
 
   R.platform = {
-    fake: { noWords: false, msPerWord: 40, cap: 4 },
+    fake: { noWords: false, msPerWord: 40, cap: 4, noVoices: false, failSpeak: null },
     alive: () => true,
     send: async () => undefined,
     speak(id, text, opts) {
@@ -27,6 +27,10 @@
         return;
       }
       const f = this.fake, step = f.msPerWord / opts.rate;
+      if (f.failSpeak !== null) {
+        timers.push(setTimeout(() => emit(id, { type: 'error', errorMessage: f.failSpeak || undefined }), 2));
+        return;
+      }
       const ws = [...text.matchAll(/\S+/g)].map(m => m.index);
       timers.push(setTimeout(() => emit(id, { type: 'start' }), 2));
       if (!f.noWords) ws.forEach((ci, i) => timers.push(setTimeout(() => emit(id, { type: 'word', charIndex: ci }), 5 + i * step)));
@@ -35,7 +39,8 @@
     stop() { clear(); if (real) speechSynthesis.cancel(); log.push({ t: 'stop' }); },
     setState: s => log.push({ t: 'state', s }),
     openSettings: () => log.push({ t: 'openSettings' }),
-    voiceInfo: async () => ({ voiceName: 'Fake', hasWord: !R.platform.fake.noWords, cap: R.platform.fake.cap }),
+    voiceInfo: async () => R.platform.fake.noVoices ? { none: true, voiceName: '', hasWord: false, cap: 2 } :
+      { voiceName: 'Fake', hasWord: !R.platform.fake.noWords, cap: R.platform.fake.cap },
     getSettings: async () => ({ ...store }),
     saveSettings: async o => { Object.assign(store, o); },
     on: (t, fn) => L[t].push(fn),

@@ -41,10 +41,48 @@
     return [...voices].sort((a, b) => score(b) - score(a))[0] || null;
   }
 
-  // Top usable speed: measured if we have it, otherwise a cautious guess.
+  // Speeds in the UI are the speed you hear. Engines don't all map the rate they're given to
+  // that: Google's online voices speed up by about rate squared (rate 2 sounds near 3.7x).
+  // Measuring records { rate sent, speedup heard } pairs, and engineRate() reads them backwards.
+
+  // The measured pairs, rising in both rate and speedup, starting at { rate: 1, speedup: 1 }.
+  function curve(m) {
+    const out = [];
+    for (const p of [...(m?.table || [])].sort((a, b) => a.rate - b.rate)) {
+      if (p.speedup > 0 && (!out.length || p.speedup > out[out.length - 1].speedup)) out.push(p);
+    }
+    return out.length > 1 && out[0].rate === 1 ? out : null;
+  }
+
+  // Until measured, assume Google's online voices square the rate and everything else is linear.
+  const guessPower = v => (v?.remote && /^Google /.test(v.voiceName || '') ? 2 : 1);
+
+  // The rate to hand the engine so the voice is heard at `want` times normal speed.
+  function engineRate(voice, caps, want) {
+    const c = curve(voice && caps?.[voice.voiceName]);
+    const clamp = r => Math.min(10, Math.max(0.1, r));
+    if (!c) return clamp(Math.pow(want, 1 / guessPower(voice)));
+    if (want <= 1) {
+      // Below 1x, carry on the curve's first step as a power law.
+      const k = Math.log(c[1].speedup) / Math.log(c[1].rate) || 1;
+      return clamp(Math.pow(want, 1 / k));
+    }
+    for (let i = 1; i < c.length; i++) {
+      const a = c[i - 1], b = c[i];
+      if (want <= b.speedup) {
+        const f = Math.log(want / a.speedup) / Math.log(b.speedup / a.speedup);
+        return clamp(a.rate * Math.pow(b.rate / a.rate, f));
+      }
+    }
+    return clamp(c[c.length - 1].rate);
+  }
+
+  // Top speed you can hear: measured if we have it, otherwise a cautious guess.
   function capFor(voice, caps) {
     const m = voice && caps?.[voice.voiceName];
-    if (m?.cap) return m.cap;
+    if (m?.best) return Math.max(1, Math.floor(m.best * 4) / 4);
+    // Google's online voices measured 3.75x in Chrome 157; other online voices are unknown.
+    if (guessPower(voice) === 2) return 3.5;
     return voice?.remote ? 2 : 4;
   }
 
@@ -61,6 +99,6 @@
 
   const fmt = r => (Math.round(r * 100) / 100).toString();
 
-  globalThis.RIP_COMMON = { DEFAULTS, STEPS, CONTENT_FILES, pickVoice, capFor, stepsFor, cssFor,
+  globalThis.RIP_COMMON = { DEFAULTS, STEPS, CONTENT_FILES, pickVoice, capFor, engineRate, stepsFor, cssFor,
     hasWord, fmt };
 })();
