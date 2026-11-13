@@ -1,0 +1,52 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Voice playback check</title>
+<!-- Runs the real offscreen player with a stand-in for chrome.runtime. Serve with
+     scripts/serve-isolated.py (threads need COOP and COEP), click Run, and read the log. -->
+<button id="run">Run</button>
+<pre id="out"></pre>
+<script>
+  let listener = null;
+  const events = [];
+  globalThis.chrome = { runtime: {
+    sendMessage: async m => { events.push({ t: performance.now(), ...m.ev, id: m.id }); },
+    onMessage: { addListener: f => { listener = f; } },
+  } };
+  const to = m => listener({ target: 'glint-offscreen', ...m });
+  const SENTENCES = [
+    'It was a bright cold day in April, and the clocks were striking thirteen.',
+    'The committee, which had been meeting for most of the afternoon, finally agreed that the new library would open in the spring, provided that the contractors could finish the roof before the first heavy rains arrived and the inspectors signed off on the wiring, the plumbing, and the fire exits.',
+    'Nobody asked why.',
+    'Outside, the wind kept on, pushing dry leaves along the gutters and rattling the signs above the shops that had already closed for the night.',
+    'She waited a moment longer, then went home.',
+  ];
+  // Reads the sentences the way the reader does: speak one, prefetch the next three, and
+  // speak the next as soon as "end" comes. Reports the silence between words.
+  window.play = async (rate = 1, voiceName = 'Heart (Glint built-in)') => {
+    events.length = 0;
+    const rows = [];
+    for (let i = 0; i < SENTENCES.length; i++) {
+      const id = i + 1, t0 = performance.now();
+      to({ type: 'speak', id, text: SENTENCES[i], voiceName, rate });
+      to({ type: 'prefetch', texts: SENTENCES.slice(i + 1, i + 4), voiceName, rate });
+      await new Promise(r => { const c = setInterval(() => {
+        if (events.some(e => e.id === id && ['end', 'error'].includes(e.type))) { clearInterval(c); r(); }
+      }, 5); });
+      const mine = events.filter(e => e.id === id);
+      const words = mine.filter(e => e.type === 'word').map(e => e.t);
+      let gap = 0;
+      for (let k = 1; k < words.length; k++) gap = Math.max(gap, words[k] - words[k - 1]);
+      const end = mine.find(e => e.type === 'end' || e.type === 'error');
+      rows.push({ id, firstWordMs: Math.round(words[0] - t0), maxWordGapMs: Math.round(gap),
+        words: words.length, total: Math.round(end.t - t0), end: end.type });
+    }
+    document.getElementById('out').textContent += JSON.stringify(rows, null, 1) + '\n';
+    return rows;
+  };
+</script>
+<script src="../src/shared/common.js"></script>
+<script type="module">
+  await import('../src/voice/offscreen.js');
+  to({ type: 'warm' });
+  document.getElementById('run').onclick = () => play(1);
+</script>

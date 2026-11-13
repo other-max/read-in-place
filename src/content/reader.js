@@ -24,6 +24,7 @@
   };
 
   const NO_VOICES = 'Chrome has no voices on this computer. Open settings for help.';
+  const AHEAD_SENTENCES = 3, AHEAD_CHARS = 600;
   const SPEAK_FAILED = "This voice couldn't speak. Try another voice in settings.";
 
   const block = () => st.model.blocks[st.pos.b];
@@ -211,16 +212,28 @@
     const u = (st.utt = { id, start, end, gotWord: false, startedAt: 0 });
     paintSentence();
     paintWord(start);
-    let n = end < s.end ? null : stepSentence(st.pos, +1);
-    if (n && pastEnd(n, bound)) n = null;
-    const nb = n && st.model.blocks[n.b], ns = nb && M.sentences(nb)[n.s];
     P.speak(id, b.text.slice(start, end), { rate: st.rate, voiceName: st.voice.voiceName,
-      next: ns ? nb.text.slice(ns.start, ns.end) : '' });
+      ahead: end < s.end ? [] : upcoming(bound) });
     // If the voice never reports "start", fall back to timing from now. Built-in voices
     // always report it, but loading the model the first time can take several seconds.
     st.est = setTimeout(() => {
       if (st.utt === u && !u.startedAt && !u.gotWord) estimate(u, performance.now());
     }, st.voice.builtIn ? 30000 : 1500);
+  }
+
+  // The next few sentences, so a built-in voice can make them while this one plays.
+  function upcoming(bound) {
+    const out = [];
+    let n = st.pos, chars = 0;
+    while (out.length < AHEAD_SENTENCES && chars < AHEAD_CHARS) {
+      n = stepSentence(n, +1);
+      if (!n || pastEnd(n, bound)) break;
+      const nb = st.model.blocks[n.b], ns = M.sentences(nb)[n.s];
+      const t = nb.text.slice(ns.start, ns.end);
+      out.push(t);
+      chars += t.length;
+    }
+    return out;
   }
 
   // For voices without word events: walk the words at an estimated pace.

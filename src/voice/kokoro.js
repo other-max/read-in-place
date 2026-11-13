@@ -11,7 +11,6 @@ const get = async url => {
   return r;
 };
 const SR = 24000, HOP = 600; // samples per second, samples per duration frame
-const MAX_TOKENS = 500; // the model takes 510 at most, with a pad at each end
 
 let session = null, vocab = null, PUNCT_IDS = new Set();
 const styles = new Map();
@@ -123,31 +122,29 @@ async function tokenize(text, lang) {
   return out;
 }
 
-// Groups words into model-sized runs. A long sentence's first clause goes on its own, so
-// speech can start while the rest is made.
+// Groups words into short runs, cut at punctuation where possible. Each run is played as
+// soon as it is made, so speech starts quickly and a long sentence never waits on one big
+// run. Runs start short and double up to PART_MAX, so each is made while the one before it
+// plays. A run of about 110 sounds is about 7 seconds of speech.
+const FIRST_MAX = 50, PART_MAX = 110;
 function chunks(words) {
+  const cost = w => w.ids.length + 1;
   const out = [];
-  let cur = [], n = 0;
-  const total = words.reduce((a, w) => a + w.ids.length + 1, 0);
-  for (const w of words) {
-    if (cur.length && n + w.ids.length + 1 > MAX_TOKENS) {
-      let cut = cur.length;
-      for (let i = cur.length - 1; i > cur.length / 2; i--) {
-        if (PUNCT_IDS.has(cur[i].ids.at(-1))) { cut = i + 1; break; }
-      }
-      out.push(cur.slice(0, cut));
-      cur = cur.slice(cut);
-      n = cur.reduce((a, x) => a + x.ids.length + 1, 0);
+  let i = 0;
+  while (i < words.length) {
+    const max = Math.min(PART_MAX, FIRST_MAX * 2 ** out.length);
+    let rest = 0;
+    for (let k = i; k < words.length; k++) rest += cost(words[k]);
+    if (rest <= max * 1.25) { out.push(words.slice(i)); break; } // no short leftover run
+    let n = 0, end = i, punct = 0;
+    while (end < words.length && n + cost(words[end]) <= max) {
+      n += cost(words[end++]);
+      if (n >= max * 0.3 && PUNCT_IDS.has(words[end - 1].ids.at(-1))) punct = end;
     }
-    cur.push(w);
-    n += w.ids.length + 1;
-    if (!out.length && total > 120 && n >= 30 && total - n >= 30 && PUNCT_IDS.has(w.ids.at(-1))) {
-      out.push(cur);
-      cur = [];
-      n = 0;
-    }
+    const cut = punct || Math.max(end, i + 1);
+    out.push(words.slice(i, cut));
+    i = cut;
   }
-  if (cur.length) out.push(cur);
   return out;
 }
 
@@ -157,8 +154,8 @@ export async function synth(text, { voice = 'af_heart', lang = 'en-US', speed = 
   await load();
   const words = await tokenize(text, lang);
   const st = await style(voice);
-  const parts = [];
-  for (const group of chunks(words)) {
+  const parts = [], groups = chunks(words);
+  for (const [gi, group] of groups.entries()) {
     const ids = [0], first = [];
     group.forEach((w, i) => {
       if (i) ids.push(vocab[' ']);
@@ -176,9 +173,20 @@ export async function synth(text, { voice = 'af_heart', lang = 'en-US', speed = 
     const at = [];
     let f = 0;
     for (let i = 0; i < dur.length; i++) { at.push(f); f += Number(dur[i]); }
+    let audio = out.waveform.data;
+    const times = first.map(i => (at[i] * HOP) / SR);
+    // The model pads each run with silence at both ends. Where runs of one sentence join,
+    // keep only a short pause, or a comma's worth after punctuation.
+    let from = 0, to = audio.length;
+    if (gi > 0) from = Math.max(0, Math.round((times[0] - 0.05) * SR));
+    if (gi < groups.length - 1) {
+      while (to > from && Math.abs(audio[to - 1]) < 0.02) to--;
+      to = Math.min(audio.length, to + Math.round((PUNCT_IDS.has(group.at(-1).ids.at(-1)) ? 0.2 : 0.05) * SR));
+    }
+    if (from || to < audio.length) audio = audio.slice(from, to);
     const part = {
-      audio: out.waveform.data,
-      words: group.map((w, i) => ({ charIndex: w.charIndex, t: (at[first[i]] * HOP) / SR })),
+      audio,
+      words: group.map((w, i) => ({ charIndex: w.charIndex, t: times[i] - from / SR })),
     };
     parts.push(part);
     onPart?.(part);

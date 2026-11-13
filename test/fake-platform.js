@@ -14,7 +14,7 @@
     alive: () => true,
     send: async () => undefined,
     speak(id, text, opts) {
-      log.push({ t: 'speak', id, text, rate: opts.rate });
+      log.push({ t: 'speak', id, text, rate: opts.rate, ahead: opts.ahead });
       clear();
       if (real) {
         speechSynthesis.cancel();
