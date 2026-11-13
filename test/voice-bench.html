@@ -1,0 +1,34 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Voice bench</title>
+<pre id="out"></pre>
+<script type="module">
+import { load, synth } from '../src/voice/kokoro.js';
+const out = document.getElementById('out');
+const log = s => { out.textContent += s + '\n'; console.log(s); };
+const TEXTS = [
+  'Short one.',
+  'The committee, which had been meeting for most of the afternoon, finally agreed that the new library would open in the spring, provided that the contractors could finish the roof before the first heavy rains arrived and the inspectors signed off on the wiring, the plumbing, and the fire exits.',
+  'It was a bright cold day in April, and the clocks were striking thirteen.',
+];
+window.bench = async (speed = 1) => {
+  const t0 = performance.now(); await load(); log(`load ${(performance.now() - t0).toFixed(0)} ms`);
+  const res = [];
+  for (const text of TEXTS) {
+    const s = performance.now(); let audioT = 0; const parts = [];
+    await synth(text, { speed, onPart: p => {
+      const secs = p.audio.length / 24000;
+      parts.push({ readyAt: performance.now() - s, secs, startsAt: audioT });
+      audioT += secs;
+    } });
+    // Simulated playback from the moment the first part is ready: total stall time.
+    let clock = parts[0].readyAt, stall = 0;
+    for (const p of parts) { if (p.readyAt > clock) { stall += p.readyAt - clock; clock = p.readyAt; } clock += p.secs * 1000; }
+    const r = { chars: text.length, parts: parts.map(p => `${p.secs.toFixed(1)}s@${p.readyAt.toFixed(0)}ms`).join(' '),
+      audio: audioT.toFixed(1), work: (performance.now() - s).toFixed(0), stallMs: stall.toFixed(0) };
+    log(JSON.stringify(r)); res.push(r);
+  }
+  return res;
+};
+if (location.search.includes('auto')) bench();
+</script>

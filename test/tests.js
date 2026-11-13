@@ -175,6 +175,14 @@
       if (t[1] !== 'The first paragraph has bold and italic words.') throw JSON.stringify(t);
       if (!t[2].startsWith('It also has a link')) throw JSON.stringify(t);
     },
+    async 'reader: sends the next few sentences ahead, in order'() {
+      scrollTo(0, 0);
+      await fresh();
+      await waitFor(() => speaks().length >= 2, 5000);
+      const t = speaks().map(s => s.text), a = speaks()[0].ahead;
+      if (!Array.isArray(a) || a.length < 2 || a.length > 3) throw JSON.stringify(a);
+      if (a[0] !== t[1]) throw JSON.stringify({ ahead: a, next: t[1] });
+    },
     async 'keys: space pauses and resumes from the same word'() {
       scrollTo(0, 0);
       await fresh();

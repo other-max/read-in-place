@@ -1,11 +1,13 @@
 // Plays the built-in voices. The service worker sends speak, stop, pause, resume, prefetch,
 // and warm. This page sends back start, word, end, and error events for the utterance.
+import { stretch } from './stretch.js';
+
 const G = globalThis.RIP_COMMON.GLINT;
 const worker = new Worker(new URL('tts-worker.js', import.meta.url), { type: 'module' });
 
 const cache = new Map(); // key -> { parts: [], done, error, wake: Set<fn> }
 let cur = null; // the utterance playing now
-let lastPrefetch = '';
+let ahead = []; // cache keys of the sentences after the one playing
 let jobs = 0;
 
 const voiceOf = name => G.voices.find(v => v.voiceName === name) || G.voices[0];
@@ -19,7 +21,11 @@ function request(text, voiceName, rate, urgent) {
     e = { job: ++jobs, voice: v.id, speed, text, parts: [], done: false, error: null, wake: new Set() };
     cache.set(key, e);
     worker.postMessage({ type: 'synth', job: e.job, key, text, voice: v.id, lang: v.lang, speed, urgent });
-    while (cache.size > 8) cache.delete(cache.keys().next().value);
+    // Forget the oldest audio, but never what is playing or coming up next.
+    for (const [k, x] of cache) {
+      if (cache.size <= 12) break;
+      if (k !== key && x !== cur?.e && !ahead.includes(k)) cache.delete(k);
+    }
   } else if (urgent && !e.done) {
     worker.postMessage({ type: 'bump', key });
   }
@@ -55,20 +61,23 @@ worker.onmessage = ({ data: m }) => {
   if (m.type === 'part') e.parts.push({ audio: m.audio, words: m.words });
   else if (m.type === 'done') e.done = true;
   else if (m.type === 'error') e.error = m.message;
-  e.wake.forEach(f => f());
+  [...e.wake].forEach(f => f()); // a copy: each wakes once, and may wait again
 };
 
 const send = (id, ev) => chrome.runtime.sendMessage({ type: 'glintEvent', id, ev }).catch(() => {});
 
-function wav(f32) {
-  const n = f32.length, buf = new ArrayBuffer(44 + n * 2), d = new DataView(buf);
-  const str = (o, s) => [...s].forEach((c, i) => d.setUint8(o + i, c.charCodeAt(0)));
-  str(0, 'RIFF'); d.setUint32(4, 36 + n * 2, true); str(8, 'WAVE'); str(12, 'fmt ');
-  d.setUint32(16, 16, true); d.setUint16(20, 1, true); d.setUint16(22, 1, true);
-  d.setUint32(24, 24000, true); d.setUint32(28, 48000, true); d.setUint16(32, 2, true);
-  d.setUint16(34, 16, true); str(36, 'data'); d.setUint32(40, n * 2, true);
-  for (let i = 0; i < n; i++) d.setInt16(44 + i * 2, Math.max(-1, Math.min(1, f32[i])) * 32767, true);
-  return new Blob([buf], { type: 'audio/wav' });
+// Playback goes through Web Audio, not <audio>. Each part is queued to start the moment the
+// one before it ends, so a sentence plays without gaps. Chrome also shows its media controls
+// for <audio> longer than a few seconds, which made a toolbar icon come and go as we read.
+const SR = 24000;
+let ctx = null, gain = null;
+function audioOut() {
+  if (!ctx) {
+    ctx = new AudioContext({ sampleRate: SR, latencyHint: 'playback' });
+    gain = ctx.createGain();
+    gain.connect(ctx.destination);
+  }
+  return ctx;
 }
 
 function speak({ id, text, voiceName, rate = 1, volume = 1 }) {
@@ -76,65 +85,66 @@ function speak({ id, text, voiceName, rate = 1, volume = 1 }) {
   const { key, e, skip, playback } = reuse(text, voiceName, rate) || request(text, voiceName, rate, true);
   if (!e.done) worker.postMessage({ type: 'bump', key });
   // Drop unfinished work for text that reading has moved past. Keep work for this text and
-  // the next sentence at any speed, since it can be reused at a new rate.
-  const texts = [e.text, cache.get(lastPrefetch)?.text];
+  // the sentences after it at any speed, since it can be reused at a new rate.
+  const texts = [e.text, ...ahead.map(k => cache.get(k)?.text)];
   for (const [k, x] of cache) if (!x.done && !texts.includes(x.text)) cache.delete(k);
   worker.postMessage({ type: 'drop', keep: [...cache.keys()] });
-  cur = { id, e, skip, part: 0, playback, volume, audio: null, url: '', timer: 0, started: false, paused: false };
+  const out = audioOut();
+  out.resume().catch(() => {});
+  gain.gain.value = volume;
+  cur = { id, e, skip, part: 0, playback, at: 0, marks: [], w: 0, sources: [], timer: 0,
+    started: false, finished: false, first: true };
+  cur.timer = setInterval(() => tick(cur), 15);
   next(cur);
 }
 
+// Queues every part that is ready. Called again as each new part arrives.
 function next(u) {
   if (cur !== u) return;
-  const p = u.e.parts[u.part];
-  if (!p) {
-    if (u.e.error) { send(u.id, { type: 'error', errorMessage: u.e.error }); cur = null; return; }
-    if (u.e.done) { send(u.id, { type: 'end', charIndex: 0 }); cur = null; return; }
-    const wake = () => { u.e.wake.delete(wake); next(u); };
-    u.e.wake.add(wake);
-    return;
-  }
-  if (p.words.length && p.words.at(-1).charIndex < u.skip) { u.part++; return next(u); } // before the start
-  const words = p.words.filter(x => x.charIndex >= u.skip);
-  const audio = new Audio();
-  u.url = URL.createObjectURL(wav(p.audio));
-  audio.src = u.url;
-  audio.preservesPitch = true;
-  audio.playbackRate = u.playback;
-  audio.volume = u.volume;
-  if (words.length && words[0].t > 0 && u.skip) audio.currentTime = Math.max(0, words[0].t - 0.03);
-  u.audio = audio;
-  let w = 0;
-  const tick = () => {
-    while (w < words.length && words[w].t <= audio.currentTime + 0.02) {
-      send(u.id, { type: 'word', charIndex: words[w++].charIndex - u.skip });
-    }
-  };
-  audio.onplaying = () => {
+  for (let p; (p = u.e.parts[u.part]); u.part++) {
+    if (p.words.length && p.words.at(-1).charIndex < u.skip) continue; // before the start
+    const words = p.words.filter(x => x.charIndex >= u.skip);
+    // Starting partway into the first part: begin just before the first word.
+    const off = u.first && u.skip && words.length ? Math.max(0, words[0].t - 0.03) : 0;
+    u.first = false;
+    const pcm = stretch(p.audio.subarray(Math.round(off * SR)), u.playback);
+    const buf = ctx.createBuffer(1, pcm.length, SR);
+    buf.copyToChannel(pcm, 0);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(gain);
+    const when = Math.max(u.at, ctx.currentTime + 0.03);
+    src.start(when);
+    u.sources.push(src);
+    src.onended = () => { const i = u.sources.indexOf(src); if (i >= 0) u.sources.splice(i, 1); };
+    u.at = when + buf.duration;
+    for (const x of words) u.marks.push({ at: when + (x.t - off) / u.playback, charIndex: x.charIndex - u.skip });
+    dbg('queue part', u.part, 'secs', buf.duration.toFixed(2), 'wait', (when - ctx.currentTime).toFixed(2));
     if (!u.started) { u.started = true; send(u.id, { type: 'start', charIndex: 0 }); }
-    clearInterval(u.timer);
-    u.timer = setInterval(tick, 15);
-    tick();
-  };
-  audio.onended = () => {
-    clearInterval(u.timer);
-    tick();
-    URL.revokeObjectURL(u.url);
-    u.part++;
-    next(u);
-  };
-  audio.onerror = () => {
-    if (cur === u) { send(u.id, { type: 'error', errorMessage: 'Audio playback failed' }); stop(); }
-  };
-  dbg('play part', u.part, 'secs', (p.audio.length / 24000).toFixed(2), 'rate', u.playback);
-  if (!u.paused) audio.play().catch(e => dbg('play failed', String(e)));
+  }
+  if (u.e.error) { send(u.id, { type: 'error', errorMessage: u.e.error }); stop(); return; }
+  if (u.e.done) { u.finished = true; return; }
+  const wake = () => { u.e.wake.delete(wake); next(u); };
+  u.e.wake.add(wake);
+}
+
+// Sends word events as their time comes, and the end once the last part has played.
+function tick(u) {
+  if (cur !== u) return;
+  const now = ctx.currentTime; // stands still while paused
+  while (u.w < u.marks.length && u.marks[u.w].at <= now + 0.02) {
+    send(u.id, { type: 'word', charIndex: u.marks[u.w++].charIndex });
+  }
+  if (u.finished && now >= u.at - 0.01) {
+    send(u.id, { type: 'end', charIndex: 0 });
+    stop();
+  }
 }
 
 function stop() {
   if (!cur) return;
   clearInterval(cur.timer);
-  if (cur.audio) { cur.audio.onended = cur.audio.onerror = null; cur.audio.pause(); }
-  if (cur.url) URL.revokeObjectURL(cur.url);
+  for (const s of cur.sources) { s.onended = null; try { s.stop(); } catch {} s.disconnect(); }
   cur = null;
 }
 
@@ -144,13 +154,14 @@ chrome.runtime.onMessage.addListener(m => {
   switch (m.type) {
     case 'speak': speak(m); break;
     case 'stop': stop(); break;
-    case 'pause': if (cur) { cur.paused = true; cur.audio?.pause(); } break;
-    case 'resume': if (cur) { cur.paused = false; cur.audio?.play().catch(() => {}); } break;
-    case 'prefetch': {
-      const r = reuse(m.text, m.voiceName, m.rate);
-      lastPrefetch = r && !r.skip ? r.key : request(m.text, m.voiceName, m.rate, false).key;
+    case 'pause': ctx?.suspend(); break;
+    case 'resume': ctx?.resume(); break;
+    case 'prefetch': // the next few sentences, in reading order
+      ahead = m.texts.map(text => {
+        const r = reuse(text, m.voiceName, m.rate);
+        return r && !r.skip ? r.key : request(text, m.voiceName, m.rate, false).key;
+      });
       break;
-    }
     case 'warm': worker.postMessage({ type: 'warm' }); break;
   }
 });
