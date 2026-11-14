@@ -16,4 +16,5 @@ globalThis.chrome = {
   },
   runtime: { sendMessage: async () => ({}) },
   tabs: { create: () => {} },
+  commands: { getAll: async () => [{ name: 'toggle-reader', shortcut: 'Alt+Shift+G' }] },
 };

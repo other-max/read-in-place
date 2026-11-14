@@ -140,6 +140,7 @@ https://navica.llc/tools/glint-reader/ (also the manifest `homepage_url`)
 
 | Version | Date | Changes | Status |
 |---------|------|---------|--------|
+| 0.2.9 | 2026-11-13 | The start shortcut is now Alt+Shift+G (Option+Shift+G on a Mac). Chrome reserves Alt+Shift+R, so the old shortcut never worked. The settings page and toolbar tooltip show the shortcut Chrome assigned, and say when none is set. | Draft |
 | 0.2.7 | 2026-11-12 | Built-in voices are never measured: the settings page no longer runs a minute of silent measuring, and their top speed is 4x. No more errors when a tab closes while reading. | Draft |
 | 0.2.6 | 2026-11-12 | Reads text inside web components (open shadow roots), such as MSN articles and Salesforce-style apps. Highlighting, clicks, the right-click menu, and scrolling work there too. Adds four built-in voices (Kokoro-82M, English) that run on the device, with exact word highlighting. Adds the ttsEngine and offscreen permissions. Now open source under GPL-3.0. | Draft |
 | 0.2.5 | 2026-11-12 | Reads email bodies in Karbon and other pages that wrap text in display: contents, text shown inside a hidden box, and selections inside frames. | Draft |

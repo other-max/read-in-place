@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Glint Reader: reads any web page aloud, word by word",
   "short_name": "Glint Reader",
-  "version": "0.2.7",
+  "version": "0.2.9",
   "description": "Reads any web page aloud right where it is, highlighting each word on the page as it is spoken.",
   "homepage_url": "https://navica.llc/tools/glint-reader/",
   "minimum_chrome_version": "128",
@@ -29,7 +29,7 @@
     "service_worker": "background/service-worker.js"
   },
   "action": {
-    "default_title": "Glint Reader (Alt+Shift+R)",
+    "default_title": "Glint Reader (Alt+Shift+G)",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png",
@@ -46,8 +46,8 @@
   "commands": {
     "toggle-reader": {
       "suggested_key": {
-        "default": "Alt+Shift+R",
-        "mac": "Alt+Shift+R"
+        "default": "Alt+Shift+G",
+        "mac": "Alt+Shift+G"
       },
       "description": "Start or stop reading on the current tab"
     }

@@ -12,6 +12,14 @@ chrome.commands.onCommand.addListener((cmd, tab) => {
   if (cmd === 'toggle-reader') toggle(tab);
 });
 
+// Name the shortcut Chrome really assigned in the toolbar tooltip, since the user can change
+// it, and Chrome leaves it unset when another extension already has the key.
+async function showShortcut() {
+  const cmd = (await chrome.commands.getAll()).find(c => c.name === 'toggle-reader');
+  chrome.action.setTitle({ title: cmd?.shortcut ? `Glint Reader (${cmd.shortcut})` : 'Glint Reader' });
+}
+showShortcut();
+
 async function activeTab(tab) {
   if (tab?.id != null) return tab;
   const [t] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });

@@ -96,7 +96,29 @@ async function test() {
   });
 }
 
+// Show the start shortcut Chrome really assigned. It may be one the user picked, or none at
+// all when another extension already had the key.
+async function showShortcut() {
+  const cmd = (await chrome.commands?.getAll?.())?.find(c => c.name === 'toggle-reader');
+  if (!cmd) return;
+  const keys = cmd.shortcut ? (cmd.shortcut.includes('+') ? cmd.shortcut.split('+') : [...cmd.shortcut]) : [];
+  for (const el of document.querySelectorAll('.keys')) {
+    el.replaceChildren();
+    if (!keys.length) { el.textContent = 'your start shortcut'; continue; }
+    keys.forEach((k, i) => {
+      if (i && cmd.shortcut.includes('+')) el.append('+');
+      const kbd = document.createElement('kbd');
+      kbd.textContent = k;
+      el.append(kbd);
+    });
+  }
+  $('shortcut-note').textContent = keys.length ? '' :
+    'No start shortcut is set, so another extension may be using it. Choose one below, or click the toolbar icon.';
+}
+
 async function init() {
+  showShortcut();
+  addEventListener('focus', showShortcut); // back from Chrome's shortcuts page
   settings = await chrome.storage.sync.get(C.DEFAULTS);
   voices = await chrome.tts.getVoices();
   fillVoices();

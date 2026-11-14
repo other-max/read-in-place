@@ -9,7 +9,7 @@
 <body>
   <main>
     <h1>Glint Reader</h1>
-    <p class="lede">Press <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd> (<kbd>Option</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd> on a Mac) on any page to start or stop reading.</p>
+    <p class="lede" id="lede">Press <span class="keys"><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd></span> on any page to start or stop reading. Then click any text to read from there.</p>
 
     <section>
       <h2>Voice</h2>
@@ -43,7 +43,7 @@
       <h2>Keys while reading</h2>
       <table>
         <tbody>
-          <tr><td><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd></td><td>Start or stop on the current tab</td></tr>
+          <tr><td class="keys"><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd></td><td>Start or stop on the current tab</td></tr>
           <tr><td>Click text</td><td>Read from that word (<kbd>Alt</kbd>+click on links)</td></tr>
           <tr><td><kbd>Space</kbd></td><td>Pause or resume</td></tr>
           <tr><td><kbd>→</kbd> / <kbd>←</kbd></td><td>Next or previous sentence</td></tr>
@@ -54,6 +54,7 @@
           <tr><td>Corner controls</td><td>Hover the pill in the bottom-right corner to pause, change speed, open settings, or stop</td></tr>
         </tbody>
       </table>
+      <p class="hint" id="shortcut-note"></p>
       <button id="shortcuts" type="button">Change the start shortcut</button>
     </section>
   </main>

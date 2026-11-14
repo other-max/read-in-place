@@ -16,7 +16,7 @@ WHAT IT DOES
 
 HOW TO USE IT
 
-Press Alt+Shift+R (Option+Shift+R on a Mac), or click the toolbar icon, on any page. Reading starts from the top of what you can see, or from the text you selected. Press it again to stop.
+Press Alt+Shift+G (Option+Shift+G on a Mac), or click the toolbar icon, on any page. Reading starts from the top of what you can see, or from the text you selected. Press it again to stop.
 
 Or select some text and right-click. Read aloud reads just that text. Read aloud from here starts there and keeps going.
 

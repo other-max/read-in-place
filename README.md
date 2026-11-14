@@ -7,13 +7,13 @@ reflow. Click where you want it to start, jump around with keys, and watch each 
 highlight on the real page as it's spoken. Speed goes from 0.5x up to the fastest your
 voice can really go, which is usually well past 2x for on-device voices.
 
-Status: v0.2.7. Design notes and decisions are in `notes/PLAN.md`.
+Status: v0.2.9. Design notes and decisions are in `notes/PLAN.md`.
 
 ## Install
 
 1. Open `chrome://extensions` and turn on Developer mode.
 2. Click Load unpacked and pick the `src/` folder.
-3. On any page press Alt+Shift+R (Option+Shift+R on a Mac), or click the toolbar icon.
+3. On any page press Alt+Shift+G (Option+Shift+G on a Mac), or click the toolbar icon.
 
 After pulling changes, click the reload icon on the extension's card, then refresh any tab
 where it was running.

@@ -12,7 +12,7 @@ Status: v0.2.7 (renamed from Read in Place in 0.2.0). v0.1.2 was built and teste
 service worker (background/service-worker.js)
   owns chrome.tts: speak one sentence at a time, stop, voice info
   relays tts start/word/end/error events to the tab
-  toggle via chrome.commands (Alt+Shift+R) and the toolbar button; injects on demand
+  toggle via chrome.commands (Alt+Shift+G) and the toolbar button; injects on demand
   measures each voice's top speed silently (volume 0), stores it in storage.local
   opens the settings page for the corner controls
         ^  chrome.runtime messages  v
@@ -70,7 +70,7 @@ options page (options/options.html)
 
 | Action | Key | Corner controls |
 | --- | --- | --- |
-| Start / stop | Alt+Shift+R (Option+Shift+R on Mac), or the toolbar icon | ✕ stops |
+| Start / stop | Alt+Shift+G (Option+Shift+G on Mac), or the toolbar icon | ✕ stops |
 | Pause / resume | Space | ⏸ / ▶ |
 | Next / previous sentence | Right / Left | |
 | Next / previous paragraph | Down / Up | |
@@ -134,7 +134,7 @@ fine. Guards added for each member found:
   and screen-reader-only text until reading stops. Selected text is text the user can see.
 - Selections inside an iframe (email clients that sandbox the message in a frame): the
   right-click menu now runs the reader in the frame the selection is in, and speech events go
-  back to that frame. Alt+Shift+R and the toolbar button go to the frame that is reading.
+  back to that frame. The start shortcut and the toolbar button go to the frame that is reading.
 - Selections starting on skipped text (a citation, a button) were already handled by
   `rangePoints()`.
 
@@ -193,3 +193,18 @@ no other way to color it, and it is fully undone on stop. The test suite forces 
 
 - Rebindable in-page keys.
 - Chrome Web Store listing (needs a privacy policy and screenshots).
+
+## Start shortcut (0.2.9)
+
+The start shortcut was Alt+Shift+R until 0.2.9, but Chrome reserves that key for itself and
+silently never assigned it, so the shortcut never worked. Checked by loading the extension in
+a fresh profile and reading `extensions.commands` in its Preferences: Alt+Shift+R stays
+unassigned, while Alt+Shift+G, Alt+Shift+L, Alt+G, Alt+R, Ctrl+Shift+1, and Alt+Shift+Period
+are assigned. An update that changes the suggested key does assign the new one.
+
+Alt+Shift+G (G for Glint) avoids the defaults of common extensions: Read Aloud (Alt+P, Alt+O,
+Alt+Period, Alt+Comma), Okta (Alt+O), Bitwarden (Ctrl+Shift+U, L, 9), Dark Reader
+(Alt+Shift+D, A), and Loom (Alt+Shift+L). Chrome never steals a key another extension already
+holds; it leaves ours unset instead. So the settings page and the toolbar tooltip show the
+shortcut Chrome really assigned, and the settings page says when none is set.
+
