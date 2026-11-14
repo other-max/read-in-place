@@ -38,6 +38,15 @@
         "127.0.0.1"
       ],
       "port": 8766
+    },
+    {
+      "name": "voice-bench",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "scripts/serve-isolated.py",
+        "."
+      ],
+      "port": 8777
     }
   ]
 }

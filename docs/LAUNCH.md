@@ -34,7 +34,7 @@ All dashboard text, assets, permission justifications, and data use answers are 
 - [x] Manifest: bump `version` (0.2.0), add `homepage_url`, and set `description` to the summary
 - [ ] Test by hand from `src/` unpacked: shortcut, toolbar icon, settings, measure top speed.
   On Linux, use Google's .deb Chrome, not the Flatpak, which has no voices.
-- [x] Test suite passes (`test/index.html?auto`), 67 of 67 in 0.2.9
+- [x] Test suite passes (`test/index.html?auto`), 68 of 68 in 0.2.9
 - [x] Landing page and privacy page live on navica.llc (`navica-marketing` PR #86)
 - [ ] Copy the 0.2.4 privacy policy change (right-click menu, effective 2026-11-12) to the live
   privacy page in `navica-marketing`

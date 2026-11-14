@@ -158,9 +158,9 @@ async function speak(tabId, frameId, msg) {
   } catch (e) {
     relay({ type: 'error', errorMessage: String(e?.message || e) });
   }
-  // Built-in voices take a moment to make speech, so start on the next sentence now.
-  if (msg.next && C.isGlint(msg.voiceName)) {
-    toOffscreen({ type: 'prefetch', text: msg.next, voiceName: msg.voiceName, rate: opts.rate });
+  // Built-in voices take a moment to make speech, so start on the next few sentences now.
+  if (msg.ahead?.length && C.isGlint(msg.voiceName)) {
+    toOffscreen({ type: 'prefetch', texts: msg.ahead, voiceName: msg.voiceName, rate: opts.rate });
   }
 }
 

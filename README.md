@@ -42,6 +42,11 @@ python3 -m http.server 8765
 Open `http://127.0.0.1:8765/test/index.html?auto` and check the console, or run
 `await runTests()` there. The page runs the real content scripts against a fake voice.
 
+Built-in voice checks need cross-origin isolation for threads, so use
+`python3 scripts/serve-isolated.py .` (port 8777). `test/voice-bench.html` times how fast
+speech is made (`await bench(1)`). `test/voice-play.html` runs the real offscreen player and
+reports gaps between words; click Run so the page may play audio.
+
 ## Package
 
 `scripts/package.sh` zips `src/` into `dist/glint-reader-<version>.zip` (git-ignored).

@@ -21,10 +21,17 @@ the OS gives Chrome. On Linux, Chrome only sees Google's online voices, and thos
   via the `phonemizer` package), so every sound the model times belongs to one word. A word's
   start is the sum of the sound lengths before it.
 - Speed: up to 1.75x the model itself speaks faster. Above that, playback is sped up with
-  pitch kept (`preservesPitch`). Chrome doesn't mute this up to 16x. Built-in voices skip
-  speed measurement because their speed is exact.
-- When the reader speaks a sentence, the service worker also sends the next one to be made
-  ahead of time. Restarting from a word after a pause or a speed change reuses audio already
+  pitch kept, by our own WSOLA time stretch (`stretch.js`). Built-in voices skip speed
+  measurement because their speed is exact.
+- Each sentence is made in short runs cut at punctuation (about 50 sounds first, doubling up
+  to 110), and each run plays as soon as it is ready. The model's silence padding is trimmed
+  where runs of one sentence join. Before 0.2.8 a long sentence was one short clause plus
+  one big run, which paused for several seconds partway through.
+- Playback is Web Audio: each run is queued to start as the one before it ends. Before 0.2.8
+  each run was an `<audio>` element, and Chrome showed its media controls icon in the
+  toolbar for every run over about 5 seconds, so the icon came and went while reading.
+- When the reader speaks a sentence, the service worker also sends the next three (up to
+  about 600 characters) to be made ahead of time, in order. Restarting from a word after a pause or a speed change reuses audio already
   made for that sentence: it seeks to the word and changes the playback rate, so there is no
   wait.
 
@@ -35,6 +42,7 @@ the OS gives Chrome. On Linux, Chrome only sees Google's online voices, and thos
 | Model load | about 2 s |
 | First audio after a fresh install | about 5 s |
 | Making speech, 1x (4 threads / 8 threads) | 0.57 / 0.47 s of work per second of audio |
+| Long sentence (294 chars), longest wait partway (0.2.7 / 0.2.8) | 3.7 s / none |
 | Keeps up with reading, with prefetch | up to about 3x. At 4x there are 0.4 to 1 s gaps between some sentences |
 | Package size | 106 MB unpacked (model 92 MB, runtime 15 MB, eSpeak 1.3 MB) |
 
