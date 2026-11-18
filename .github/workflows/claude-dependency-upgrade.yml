@@ -1,0 +1,84 @@
+# Runs Claude Code on Renovate PRs labelled major-upgrade. Every update of a
+# vendored library (src/voice/vendor) gets that label, because Renovate only
+# bumps the version in NOTICE.md and Claude has to replace the files.
+# Claude pushes to the PR branch and comments a summary. It never merges.
+# Add the claude-retry label to run it again. Renovate adds labels after
+# opening the PR, so this triggers on the label.
+name: Claude dependency upgrade
+
+on:
+  pull_request:
+    types: [labeled, reopened]
+
+concurrency:
+  group: claude-upgrade-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  upgrade:
+    if: >-
+      github.event.pull_request.user.login == 'renovate[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      contains(github.event.pull_request.labels.*.name, 'major-upgrade') &&
+      (github.event.action != 'labeled' ||
+       github.event.label.name == 'major-upgrade' ||
+       github.event.label.name == 'claude-retry')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          allowed_bots: 'renovate[bot]'
+          claude_args: '--max-turns 80 --allowedTools "Read,Edit,Write,Glob,Grep,WebFetch,WebSearch,Bash(npm view:*),Bash(npm pack:*),Bash(npx:*),Bash(node:*),Bash(tar:*),Bash(cp:*),Bash(ls:*),Bash(sha256sum:*),Bash(python3 -m http.server:*),Bash(git:*),Bash(gh pr comment:*),Bash(gh pr edit:*)"'
+          prompt: |
+            You are upgrading a dependency on Renovate PR #${{ github.event.pull_request.number }} in ${{ github.repository }}.
+            Read CLAUDE.md first and follow it. The PR body names the package and the new version.
+            This extension has no package.json. Third-party code is vendored by hand in src/voice/vendor
+            and listed in src/voice/vendor/NOTICE.md and THIRD_PARTY_NOTICES.md.
+
+            For a vendored library (onnxruntime-web or phonemizer):
+            1. Read the release notes between the old and new versions. Note breaking changes and any license change.
+               If the license changes, stop: comment and add the needs-human label (phonemizer's GPL chain matters here).
+            2. Get the exact release with `npm pack <package>@<version>` and unpack it with tar in a temp directory.
+               Replace only the files that are already in src/voice/vendor with their counterparts from the package
+               (for onnxruntime-web: ort.wasm.min.mjs and ort-wasm-simd-threaded.mjs/.wasm from dist/; for phonemizer:
+               the ESM build that matches phonemizer.js). Do not add new files unless the new version needs them.
+            3. Update src/voice/kokoro.js and the other voice code only where the new API requires it.
+            4. Update the versions in NOTICE.md and THIRD_PARTY_NOTICES.md.
+            For a GitHub Actions major: update the workflow inputs as the action's migration notes say.
+
+            Then:
+            5. Run the test page headless: start `python3 -m http.server 8765` in the repo root in the background,
+               then use Playwright (`npx --yes playwright@1.56.1 install chromium`, then a short node script) to open
+               http://127.0.0.1:8765/test/index.html?auto and read the results from the console. All tests must pass.
+               The test page uses a fake voice, so also `node --check` the vendored and voice modules.
+            6. For a vendored update (it ships to users): bump the patch version in src/manifest.json, update the README
+               status, and add a version-history entry to CHROMEWEBSTORE.md, as CLAUDE.md requires. Follow the
+               user-facing writing style in CLAUDE.md. Do not create a tag or release.
+            7. Commit as "chore(deps): update vendored <package> to <version>" and push to this PR branch.
+            8. Comment on the PR: what changed, file checksums, test results, and what a human should check by hand
+               (load src/ unpacked and play the built-in voice on a real page; the model file is not in the repo).
+            If anything fails or is unclear, do not push broken code: comment with the blocker and run
+            `gh pr edit --add-label needs-human`. Never merge the PR.
+
+      - name: Clear the claude-retry label
+        if: always() && contains(github.event.pull_request.labels.*.name, 'claude-retry')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh pr edit "${{ github.event.pull_request.number }}" --repo "$GITHUB_REPOSITORY" --remove-label claude-retry

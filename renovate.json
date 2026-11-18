@@ -1,0 +1,46 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Tracks the libraries vendored in src/voice/vendor via the versions in NOTICE.md. Renovate only bumps the version text; the Claude upgrade job replaces the vendored files. The extension ships to the Chrome Web Store, so a human merges every update.",
+  "extends": ["config:recommended", ":dependencyDashboard"],
+  "enabledManagers": ["custom.regex", "github-actions"],
+  "minimumReleaseAge": "14 days",
+  "internalChecksFilter": "strict",
+  "prConcurrentLimit": 2,
+  "automerge": false,
+  "schedule": ["* 0-6 * * 1"],
+  "vulnerabilityAlerts": {
+    "labels": ["security"],
+    "minimumReleaseAge": null,
+    "schedule": ["at any time"]
+  },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Vendored ONNX Runtime Web (ort.wasm.min.mjs, ort-wasm-simd-threaded.*)",
+      "managerFilePatterns": ["/^src/voice/vendor/NOTICE\\.md$/"],
+      "matchStrings": ["ONNX Runtime Web (?<currentValue>\\d+\\.\\d+\\.\\d+)"],
+      "depNameTemplate": "onnxruntime-web",
+      "datasourceTemplate": "npm"
+    },
+    {
+      "customType": "regex",
+      "description": "Vendored phonemizer (phonemizer.js)",
+      "managerFilePatterns": ["/^src/voice/vendor/NOTICE\\.md$/"],
+      "matchStrings": ["`phonemizer\\.js`: phonemizer (?<currentValue>\\d+\\.\\d+\\.\\d+)"],
+      "depNameTemplate": "phonemizer",
+      "datasourceTemplate": "npm"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Every vendored update needs Claude to swap the files, whatever its size",
+      "matchManagers": ["custom.regex"],
+      "labels": ["vendored-upgrade", "major-upgrade"]
+    },
+    {
+      "description": "Majors (GitHub Actions included) get the Claude job",
+      "matchUpdateTypes": ["major"],
+      "labels": ["major-upgrade"]
+    }
+  ]
+}
